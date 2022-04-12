@@ -3,6 +3,8 @@ package utils
 import (
 	"bytes"
 	"fmt"
+	"github.com/pkg/errors"
+	"log"
 	"math/rand"
 	"sync"
 )
@@ -34,7 +36,7 @@ func NewNode(entry *Entry, height int) *Node {
 	return node
 }
 
-func NewSkipList(arenaSize int64) *SkipList {
+func NewSkipList() *SkipList {
 	list := &SkipList{
 		head:      NewNode(&Entry{Key: []byte{0}}, kMaxHeight),
 		maxHeight: 0,
@@ -160,6 +162,10 @@ func (list *SkipList) randomHeight() int {
 	return h
 }
 
+func (list *SkipList) Close() error {
+	return nil
+}
+
 func (list *SkipList) PrintSkipList() {
 	p := list.head
 	level := list.GetMaxHeight() - 1
@@ -169,5 +175,53 @@ func (list *SkipList) PrintSkipList() {
 			next = next.next[i]
 		}
 		fmt.Println()
+	}
+}
+
+type SkipListIterator struct {
+	list *SkipList
+	node *Node
+}
+
+func (list *SkipList) NewIterator() *SkipListIterator {
+	return &SkipListIterator{
+		list: list,
+		node: list.head,
+	}
+}
+
+func (iter *SkipListIterator) Next() {
+
+	iter.node = iter.node.next[0]
+}
+
+func (iter *SkipListIterator) Valid() bool {
+	return iter.node != nil
+}
+
+func (iter *SkipListIterator) Rewind() {
+	iter.node = iter.list.head
+}
+
+func (iter *SkipListIterator) Item() Item {
+	if !iter.Valid() {
+		log.Fatalf("%+v", errors.Errorf("Assert failed"))
+	}
+	return &Entry{
+		Key:   iter.node.Entry.Key,
+		Value: iter.node.Entry.Key,
+	}
+}
+
+func (iter *SkipListIterator) Close() error {
+	return iter.list.Close()
+}
+
+func (iter *SkipListIterator) Seek(key []byte) {
+	iter.Rewind()
+	iter.Next()
+	for n := iter.Item(); n != nil && bytes.Compare(n.Entry().Key, key) != 0; {
+		n = iter.Item()
+		iter.Next()
 	}
 }

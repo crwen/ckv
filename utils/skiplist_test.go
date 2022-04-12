@@ -9,7 +9,7 @@ import (
 )
 
 func TestSkipListAdd(t *testing.T) {
-	list := NewSkipList(2000)
+	list := NewSkipList()
 	key, val := "", ""
 	maxTime := 20
 	for i := 0; i < maxTime; i++ {
@@ -25,7 +25,7 @@ func TestSkipListAdd(t *testing.T) {
 }
 
 func TestSkipListBasicCRUD(t *testing.T) {
-	list := NewSkipList(1024)
+	list := NewSkipList()
 
 	//Put & Get
 	entry1 := NewEntry([]byte("Key1"), []byte("Val1"))
@@ -48,7 +48,7 @@ func TestSkipListBasicCRUD(t *testing.T) {
 }
 
 func Benchmark_SkipListBasicCRUD(b *testing.B) {
-	list := NewSkipList(10000000)
+	list := NewSkipList()
 	key, val := "", ""
 	maxTime := 100000
 	for i := 0; i < maxTime; i++ {
@@ -64,7 +64,7 @@ func Benchmark_SkipListBasicCRUD(b *testing.B) {
 
 func TestConcurrentBasic(t *testing.T) {
 	const n = 1000
-	l := NewSkipList(1000)
+	l := NewSkipList()
 	var wg sync.WaitGroup
 	key := func(i int) []byte {
 		return []byte(fmt.Sprintf("%05d", i))
@@ -96,7 +96,7 @@ func TestConcurrentBasic(t *testing.T) {
 
 func Benchmark_ConcurrentBasic(b *testing.B) {
 	const n = 1000
-	l := NewSkipList(1)
+	l := NewSkipList()
 	var wg sync.WaitGroup
 	key := func(i int) []byte {
 		return []byte(fmt.Sprintf("%05d", i))
@@ -124,4 +124,34 @@ func Benchmark_ConcurrentBasic(b *testing.B) {
 		}(i)
 	}
 	wg.Wait()
+}
+
+func TestSkipListIterator(t *testing.T) {
+	list := NewSkipList()
+	for i := 0; i < 100; i++ {
+		key := []byte(fmt.Sprintf("%05d", i))
+		v := []byte(fmt.Sprintf("%05d", i))
+		list.Add(&Entry{Key: key, Value: v})
+	}
+	//list.PrintSkipList()
+
+	iter := list.NewIterator()
+	iter.Next()
+
+	for i := 0; iter.Valid(); i++ {
+		next := iter.Item()
+		assert.Equal(t, []byte(fmt.Sprintf("%05d", i)), next.Entry().Value)
+		assert.Equal(t, []byte(fmt.Sprintf("%05d", i)), next.Entry().Key)
+		iter.Next()
+	}
+
+	iter.Rewind()
+	iter.Next()
+
+	for i := 0; iter.Valid(); i++ {
+		next := iter.Item()
+		assert.Equal(t, []byte(fmt.Sprintf("%05d", i)), next.Entry().Value)
+		assert.Equal(t, []byte(fmt.Sprintf("%05d", i)), next.Entry().Key)
+		iter.Next()
+	}
 }
