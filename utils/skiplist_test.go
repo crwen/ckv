@@ -14,14 +14,14 @@ func TestSkipListAdd(t *testing.T) {
 	maxTime := 20
 	for i := 0; i < maxTime; i++ {
 		//number := rand.Intn(10000)
-		key, val = fmt.Sprintf("Key%d", i), fmt.Sprintf("Val%d", i)
+		key, val = fmt.Sprintf("%d", i), fmt.Sprintf("%d", i)
 		entry := NewEntry([]byte(key), []byte(val))
 		res := list.Add(entry)
 		assert.Equal(t, res, nil)
 		searchVal := list.Search([]byte(key))
-		assert.Equal(t, searchVal.Value, []byte(val))
+		assert.Equal(t, searchVal.Entry.Value, []byte(val))
 	}
-	list.levelPrint()
+	list.PrintSkipList()
 }
 
 func TestSkipListBasicCRUD(t *testing.T) {
@@ -30,11 +30,11 @@ func TestSkipListBasicCRUD(t *testing.T) {
 	//Put & Get
 	entry1 := NewEntry([]byte("Key1"), []byte("Val1"))
 	assert.Nil(t, list.Add(entry1))
-	assert.Equal(t, entry1.Value, list.Search(entry1.Key).Value)
+	assert.Equal(t, entry1.Value, list.Search(entry1.Key).Entry.Value)
 
 	entry2 := NewEntry([]byte("Key2"), []byte("Val2"))
 	assert.Nil(t, list.Add(entry2))
-	assert.Equal(t, entry2.Value, list.Search(entry2.Key).Value)
+	assert.Equal(t, entry2.Value, list.Search(entry2.Key).Entry.Value)
 
 	//Get a not exist entry
 	assert.Nil(t, list.Search([]byte("noexist")))
@@ -42,7 +42,8 @@ func TestSkipListBasicCRUD(t *testing.T) {
 	//Update a entry
 	entry2_new := NewEntry([]byte("Key1"), []byte("Val1+1"))
 	assert.Nil(t, list.Add(entry2_new))
-	assert.Equal(t, entry2_new.Value, list.Search(entry2_new.Key).Value)
+	assert.Equal(t, entry2_new.Value, list.Search(entry2_new.Key).Entry.Value)
+	list.PrintSkipList()
 
 }
 
@@ -57,7 +58,7 @@ func Benchmark_SkipListBasicCRUD(b *testing.B) {
 		res := list.Add(entry)
 		assert.Equal(b, res, nil)
 		searchVal := list.Search([]byte(key))
-		assert.Equal(b, searchVal.Value, []byte(val))
+		assert.Equal(b, searchVal.Entry.Value, []byte(val))
 	}
 }
 
@@ -84,7 +85,7 @@ func TestConcurrentBasic(t *testing.T) {
 			defer wg.Done()
 			v := l.Search(key(i))
 			if v != nil {
-				require.EqualValues(t, key(i), v.Value)
+				require.EqualValues(t, key(i), v.Entry.Value)
 				return
 			}
 			require.Nil(t, v)
@@ -116,7 +117,7 @@ func Benchmark_ConcurrentBasic(b *testing.B) {
 			defer wg.Done()
 			v := l.Search(key(i))
 			if v != nil {
-				require.EqualValues(b, key(i), v.Value)
+				require.EqualValues(b, key(i), v.Entry.Value)
 				return
 			}
 			require.Nil(b, v)
