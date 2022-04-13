@@ -140,7 +140,7 @@ func (list *SkipList) Add(entry *Entry) error {
 	return nil
 }
 
-func (list *SkipList) Search(key []byte) *Node {
+func (list *SkipList) Search(key []byte) []byte {
 	list.lock.RLock()
 	defer list.lock.RUnlock()
 	p := list.head
@@ -149,7 +149,7 @@ func (list *SkipList) Search(key []byte) *Node {
 		for next := p.next[i]; next != nil; {
 			if list.KeyIsAfterNode(key, next) {
 				if i == 0 && list.compare(calcScore(key), key, next) == 0 {
-					return next
+					return next.getValue(list.arena)
 				}
 				break
 			} else {
@@ -210,6 +210,8 @@ func (list *SkipList) randomHeight() int {
 	}
 	return h
 }
+
+func (s *SkipList) Size() int64 { return s.arena.size() }
 
 func (list *SkipList) Close() error {
 	return nil

@@ -2,24 +2,38 @@ package lsm
 
 import "SimpleKV/utils"
 
-type MemTable struct {
+type memTable struct {
 	table *utils.SkipList
 	arena *utils.Arena
 
 	// TODO: wal
 }
 
-func (mem MemTable) NewMemTable(arenaSize int) *MemTable {
+func NewMemTable() *memTable {
 	arena := utils.NewArena()
-	return &MemTable{
+	return &memTable{
 		table: utils.NewSkipList(arena),
 		arena: arena,
 	}
 }
 
-func (mem MemTable) set(entry *utils.Entry) error {
+func (mem memTable) set(entry *utils.Entry) error {
 
 	mem.table.Add(entry)
 
 	return nil
+}
+
+func (mem memTable) Get(key []byte) (*utils.Entry, error) {
+
+	v := mem.table.Search(key)
+	e := &utils.Entry{
+		Key:   key,
+		Value: v,
+	}
+	return e, nil
+}
+
+func (m *memTable) Size() int64 {
+	return m.table.Size()
 }

@@ -1,6 +1,9 @@
 package utils
 
-import "encoding/binary"
+import (
+	"encoding/binary"
+	"hash/crc32"
+)
 
 func EncodeVarint32(buf []byte, v uint32) int {
 
@@ -62,3 +65,8 @@ func DecodeVarint64(buf []byte) uint64 {
 //func EncodeFixed64(buf []byte, v uint64) int {
 //
 //}
+
+// CalculateChecksum _
+func CalculateChecksum(data []byte) uint64 {
+	return uint64(crc32.Checksum(data, CastagnoliCrcTable))
+}
