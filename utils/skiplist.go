@@ -10,59 +10,106 @@ import (
 )
 
 const (
-	kMaxHeight = 20
+	kMaxHeight = 12
 )
 
 type SkipList struct {
 	head      *Node
 	maxHeight int
 	rand      *rand.Rand
+	arena     *Arena
 	lock      sync.RWMutex
 }
 
 type Node struct {
-	Entry *Entry
-	next  []*Node
-	score float64
+	//Entry     *Entry
+	keyOffset   uint32
+	valueOffset uint32
+	next        [kMaxHeight]*Node
 }
 
-func NewNode(entry *Entry, height int) *Node {
+type Key struct {
+	keyOffset uint32
+	keySize   uint32
+}
 
-	node := &Node{
-		Entry: entry,
-		next:  make([]*Node, height),
-		score: calcScore(entry.Key),
-	}
+type Value struct {
+	valueOffset uint32
+	valueSize   uint32
+}
+
+func NewNode(arena *Arena, entry *Entry, height int) *Node {
+	keySize := len(entry.Key)
+	valSize := len(entry.Value)
+	//internalKeySize := keySize + 8
+	internalKeySize := keySize
+	encodedLen := VarintLength(uint64(internalKeySize)) +
+		internalKeySize + VarintLength(uint64(valSize)) + valSize
+
+	offset := arena.Allocate(uint32(encodedLen))
+	kw := arena.PutKey(entry.Key, offset)
+	arena.PutVal(entry.Value, offset+kw)
+
+	nodeOffset := arena.putNode(height)
+
+	node := arena.getNode(nodeOffset)
+	//node.key = &Key{keyOffset: offset, keySize: uint32(keySize)}
+	node.keyOffset = offset
+	node.valueOffset = offset + kw
+	//node.value = &Value{valueOffset: offset + kw, valueSize: uint32(valSize)}
+	//node.next = make([]*Node, height)
 	return node
+
 }
 
-func NewSkipList() *SkipList {
+func encodeValue(valOffset uint32, valSize uint32) uint64 {
+	return uint64(valSize)<<32 | uint64(valOffset)
+}
+
+func (node *Node) Next(height int) *Node {
+	return node.next[height]
+}
+
+func (node *Node) getKey(arena *Arena) []byte {
+	k, _ := arena.getKey(node.keyOffset)
+	return k
+}
+
+func (node *Node) getValue(arena *Arena) []byte {
+	v, _ := arena.getVal(node.valueOffset)
+	return v
+}
+
+func NewSkipList(arena *Arena) *SkipList {
 	list := &SkipList{
-		head:      NewNode(&Entry{Key: []byte{0}}, kMaxHeight),
+		head:      NewNode(arena, &Entry{Key: []byte{0}}, kMaxHeight),
 		maxHeight: 0,
 		rand:      r,
+		arena:     arena,
 		lock:      sync.RWMutex{},
 	}
 	return list
 }
 
-func (list *SkipList) FindGreaterOrEqual(entry *Entry, prev []*Node) *Node {
+func (list *SkipList) FindGreaterOrEqual(key []byte, prev []*Node) *Node {
 	p := list.head
 	level := list.GetMaxHeight() - 1
 
 	for i := level; i >= 0; i-- {
 		for next := p.next[i]; next != nil; {
-			if list.KeyIsAfterNode(entry.Key, next) {
-				if list.compare(calcScore(entry.Key), entry.Key, next) == 0 {
-					next.Entry.Value = entry.Value
-				}
+			if list.KeyIsAfterNode(key, next) {
+				//if prev != nil && list.compare(calcScore(entry.Key), entry.Key, next) == 0 {
+				//	next.Entry.Value = entry.Value
+				//}
 				break
 			} else {
 				p = next
 				next = next.next[i]
 			}
 		}
-		prev[i] = p
+		if prev != nil {
+			prev[i] = p
+		}
 	}
 	return p
 }
@@ -71,10 +118,10 @@ func (list *SkipList) Add(entry *Entry) error {
 	list.lock.Lock()
 	defer list.lock.Unlock()
 	prev := make([]*Node, kMaxHeight)
-	p := list.FindGreaterOrEqual(entry, prev)
-	if p.next[0] != nil && bytes.Compare(entry.Key, p.next[0].Entry.Key) == 0 {
-		return nil
-	}
+	p := list.FindGreaterOrEqual(entry.Key, prev)
+	//if p.next[0] != nil && bytes.Compare(entry.Key, p.next[0].Entry.Key) == 0 {
+	//	return nil
+	//}
 	height := list.randomHeight()
 	if height > list.GetMaxHeight() {
 		for i := list.GetMaxHeight(); i < height; i++ {
@@ -83,7 +130,7 @@ func (list *SkipList) Add(entry *Entry) error {
 		list.maxHeight = height
 	}
 
-	p = NewNode(entry, height)
+	p = NewNode(list.arena, entry, height)
 	for i := 0; i < height; i++ {
 		next := prev[i].next[i]
 		p.next[i] = next
@@ -101,7 +148,7 @@ func (list *SkipList) Search(key []byte) *Node {
 	for i := level; i >= 0; i-- {
 		for next := p.next[i]; next != nil; {
 			if list.KeyIsAfterNode(key, next) {
-				if list.compare(calcScore(key), key, next) == 0 {
+				if i == 0 && list.compare(calcScore(key), key, next) == 0 {
 					return next
 				}
 				break
@@ -126,15 +173,17 @@ func (list *SkipList) KeyIsAfterNode(key []byte, next *Node) bool {
 }
 
 func (list *SkipList) compare(score float64, key []byte, next *Node) int {
-	if score == next.score {
-		return bytes.Compare(key, next.Entry.Key)
-	}
-	if score < next.score {
-		return -1
-	} else {
-		return 1
-	}
-	return 0
+	//if score == next.score {
+	//	return bytes.Compare(key, list.arena.getKey(next.key.keyOffset, next.key.keySize))
+	k, _ := list.arena.getKey(next.keyOffset)
+	return bytes.Compare(key, k)
+	//}
+	//if score < next.score {
+	//	return -1
+	//} else {
+	//	return 1
+	//}
+	//return 0
 }
 
 func calcScore(key []byte) (score float64) {
@@ -171,7 +220,8 @@ func (list *SkipList) PrintSkipList() {
 	level := list.GetMaxHeight() - 1
 	for i := level; i >= 0; i-- {
 		for next := p.next[i]; next != nil; {
-			fmt.Printf("(%s, %s) -> ", next.Entry.Key, next.Entry.Value)
+
+			fmt.Printf("(%s, %s) -> ", next.getKey(list.arena), next.getValue(list.arena))
 			next = next.next[i]
 		}
 		fmt.Println()
@@ -191,7 +241,6 @@ func (list *SkipList) NewIterator() *SkipListIterator {
 }
 
 func (iter *SkipListIterator) Next() {
-
 	iter.node = iter.node.next[0]
 }
 
@@ -203,13 +252,22 @@ func (iter *SkipListIterator) Rewind() {
 	iter.node = iter.list.head
 }
 
+func (iter *SkipListIterator) Key() []byte {
+	return iter.node.getKey(iter.list.arena)
+}
+
+func (iter *SkipListIterator) Value() []byte {
+	return iter.node.getValue(iter.list.arena)
+}
+
 func (iter *SkipListIterator) Item() Item {
 	if !iter.Valid() {
 		log.Fatalf("%+v", errors.Errorf("Assert failed"))
 	}
+
 	return &Entry{
-		Key:   iter.node.Entry.Key,
-		Value: iter.node.Entry.Key,
+		Key:   iter.node.getKey(iter.list.arena),
+		Value: iter.node.getValue(iter.list.arena),
 	}
 }
 
@@ -219,9 +277,10 @@ func (iter *SkipListIterator) Close() error {
 
 func (iter *SkipListIterator) Seek(key []byte) {
 	iter.Rewind()
-	iter.Next()
-	for n := iter.Item(); n != nil && bytes.Compare(n.Entry().Key, key) != 0; {
-		n = iter.Item()
-		iter.Next()
-	}
+	iter.list.FindGreaterOrEqual(key, nil)
+	//iter.Next()
+	//for n := iter.Item(); n != nil && bytes.Compare(n.Entry().Key, key) != 0; {
+	//	n = iter.Item()
+	//	iter.Next()
+	//}
 }

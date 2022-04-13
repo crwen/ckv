@@ -52,6 +52,8 @@ type Entry struct {
 	Value     []byte
 	ExpiresAt uint64
 
+	KeySize uint32
+
 	Meta         byte
 	Version      uint64
 	Offset       uint32
