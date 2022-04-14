@@ -13,7 +13,7 @@ var (
 	opt = &Options{
 		WorkDir:            "../work_test",
 		SSTableMaxSz:       1 << 14, // 16K
-		MemTableSize:       1 << 14, // 16K
+		MemTableSize:       1 << 12, // 16K
 		BlockSize:          1 << 10, // 1K
 		BloomFalsePositive: 0,
 	}
@@ -30,7 +30,7 @@ func TestLSM_Set(t *testing.T) {
 	}
 	lsm.Set(e)
 
-	for i := 1; i < 10000; i++ {
+	for i := 1; i < 1000; i++ {
 		e := utils.BuildEntry()
 		lsm.Set(e)
 	}

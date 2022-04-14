@@ -27,7 +27,7 @@ type BlockBuilder struct {
 }
 
 type IndexBlock struct {
-	blockOffsets *BlockOffset
+	blockOffsets []*BlockOffset
 	filter       []byte
 	keyCount     uint32
 }

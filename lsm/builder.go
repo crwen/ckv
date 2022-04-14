@@ -3,6 +3,7 @@ package lsm
 import (
 	"SimpleKV/file"
 	"SimpleKV/utils"
+	"SimpleKV/utils/codec"
 	files "SimpleKV/utils/file"
 	"errors"
 	"fmt"
@@ -167,7 +168,7 @@ func (tb *tableBuilder) tryFinishBlock(e *utils.Entry) bool {
 		4 // checksum length
 	kvSize := int64(6 /*header size for entry*/) +
 		int64(len(e.Key)) + int64(len(e.Value))
-	tb.curBlock.estimateSz = kvSize + entriesOffsetsSize
+	tb.curBlock.estimateSz = int64(tb.curBlock.end) + kvSize + entriesOffsetsSize
 
 	utils.CondPanic(!(uint64(tb.curBlock.end)+uint64(tb.curBlock.estimateSz) < math.MaxUint32), errors.New("Integer overflow"))
 
@@ -215,7 +216,7 @@ func (tb *tableBuilder) allocate(need int) []byte {
 }
 
 func (tb *tableBuilder) calculateChecksum(data []byte) []byte {
-	checkSum := utils.CalculateChecksum(data)
+	checkSum := codec.CalculateChecksum(data)
 	return utils.U64ToBytes(checkSum)
 }
 
@@ -229,19 +230,71 @@ func (tb *tableBuilder) done() buildData {
 
 	// TODO
 	// create bloom filter if needed
-	//var f utils.Filter
-	//if tb.opt.BloomFalsePositive > 0 {
-	//	bits := utils.BloomBitsPerKey(len(tb.keyHashes), tb.opt.BloomFalsePositive)
-	//	f = utils.NewFilter(tb.keyHashes, bits)
-	//}
+	var f utils.Filter
+	if tb.opt.BloomFalsePositive > 0 {
+		bits := utils.BloomBitsPerKey(len(tb.keyHashes), tb.opt.BloomFalsePositive)
+		f = utils.NewFilter(tb.keyHashes, bits)
+	}
 
 	// TODO 构建索引
-	//index, dataSize := tb.buildIndex(f)
-	//checksum := tb.calculateChecksum(index)
-	sz := 0
-	for _, blk := range tb.blockList {
-		sz += int(blk.estimateSz)
-	}
-	bd.size = sz
+	index, dataSize := tb.buildIndex(f)
+	checksum := tb.calculateChecksum(index)
+	bd.index = index
+	bd.checksum = checksum
+
+	bd.size = int(dataSize) + len(index) + len(checksum) + 4 + 4
+
 	return bd
+}
+
+func (tb *tableBuilder) buildIndex(bloom []byte) ([]byte, uint32) {
+	index := &IndexBlock{
+		blockOffsets: make([]*BlockOffset, len(tb.blockList)),
+		filter:       nil,
+		keyCount:     tb.keyCount,
+	}
+	var indexSize int
+	if len(bloom) > 0 {
+		index.filter = bloom
+		indexSize += len(bloom)
+	}
+	var dataSize uint32
+	var offset uint32
+	for i, blk := range tb.blockList {
+		index.blockOffsets[i] = &BlockOffset{
+			Key:    blk.baseKey,
+			Offset: offset,
+			Len:    uint32(blk.end),
+		}
+		indexSize += len(blk.baseKey) + 4 + 4
+		offset += uint32(blk.end)
+		dataSize += uint32(blk.end)
+	}
+	index.keyCount = tb.keyCount
+	indexSize += 4
+
+	return tb.finishIndexBlock(index, indexSize), dataSize
+}
+
+func (tb *tableBuilder) finishIndexBlock(index *IndexBlock, size int) []byte {
+
+	buf := make([]byte, size)
+	// Append the block offsets
+	off := 0
+	offsets := index.blockOffsets
+	for i := range offsets {
+		off += copy(buf[off:], utils.U32ToBytes(offsets[i].Offset))
+		off += copy(buf[off:], offsets[i].Key)
+		off += copy(buf[off:], utils.U32ToBytes(offsets[i].Len))
+	}
+
+	// Append the bloom filter
+	off += copy(buf[off:], index.filter)
+
+	// Append the max version
+	off += copy(buf[off:], utils.U64ToBytes(tb.maxVersion))
+	// Append key count
+	off += copy(buf[off:], utils.U32ToBytes(tb.keyCount))
+
+	return buf
 }

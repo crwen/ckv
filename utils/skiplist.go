@@ -2,6 +2,7 @@ package utils
 
 import (
 	"SimpleKV/utils/cmp"
+	"SimpleKV/utils/codec"
 	"fmt"
 	"github.com/pkg/errors"
 	"log"
@@ -48,8 +49,8 @@ func NewNode(arena *Arena, entry *Entry, height int) *Node {
 	valSize := len(entry.Value)
 	//internalKeySize := keySize + 8
 	internalKeySize := keySize
-	encodedLen := VarintLength(uint64(internalKeySize)) +
-		internalKeySize + VarintLength(uint64(valSize)) + valSize
+	encodedLen := codec.VarintLength(uint64(internalKeySize)) +
+		internalKeySize + codec.VarintLength(uint64(valSize)) + valSize
 
 	offset := arena.Allocate(uint32(encodedLen))
 	kw := arena.PutKey(entry.Key, offset)

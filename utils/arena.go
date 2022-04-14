@@ -1,6 +1,7 @@
 package utils
 
 import (
+	"SimpleKV/utils/codec"
 	"github.com/pkg/errors"
 	"log"
 	"sync/atomic"
@@ -139,7 +140,7 @@ func (s *Arena) putKey(key []byte) uint32 {
 func (s *Arena) PutKey(key []byte, offset uint32) uint32 {
 	keySize := len(key)
 	buf := s.buf[offset:]
-	w := EncodeVarint32(buf, uint32(keySize))
+	w := codec.EncodeVarint32(buf, uint32(keySize))
 	AssertTrue(len(key) == copy(buf[w:], key))
 	w += len(key)
 	return uint32(w)
@@ -148,7 +149,7 @@ func (s *Arena) PutKey(key []byte, offset uint32) uint32 {
 func (s *Arena) PutVal(val []byte, offset uint32) uint32 {
 	valSize := len(val)
 	buf := s.buf[offset:]
-	w := EncodeVarint32(buf, uint32(valSize))
+	w := codec.EncodeVarint32(buf, uint32(valSize))
 	AssertTrue(len(val) == copy(buf[w:], val))
 	w += len(val)
 	return uint32(w)
@@ -164,17 +165,27 @@ func (s *Arena) getNode(offset uint32) *Node {
 func (s *Arena) getVal(offset uint32) ([]byte, int) {
 	//DecodeValue(s.buf[offset : offset+size])
 	buf := s.buf[offset:]
-	sz := DecodeVarint32(buf)
-	valOff := VarintLength(uint64(sz))
+	sz := codec.DecodeVarint32(buf)
+	valOff := codec.VarintLength(uint64(sz))
 	return buf[valOff : valOff+sz], sz
 }
 
 func (s *Arena) getKey(offset uint32) ([]byte, int) {
 	//DecodeValue(s.buf[offset : offset+size])
 	buf := s.buf[offset:]
-	sz := DecodeVarint32(buf)
-	keyOff := VarintLength(uint64(sz))
+	sz := codec.DecodeVarint32(buf)
+	keyOff := codec.VarintLength(uint64(sz))
 	return buf[keyOff : keyOff+sz], sz
+}
+
+func (s *Arena) GetKey(offset uint32) ([]byte, int) {
+	//DecodeValue(s.buf[offset : offset+size])
+	return s.getKey(offset)
+}
+
+func (s *Arena) GetVal(offset uint32) ([]byte, int) {
+	//DecodeValue(s.buf[offset : offset+size])
+	return s.getVal(offset)
 }
 
 // getKey returns byte slice at offset.
