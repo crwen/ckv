@@ -1,7 +1,7 @@
 package utils
 
 import (
-	"bytes"
+	"SimpleKV/utils/cmp"
 	"fmt"
 	"github.com/pkg/errors"
 	"log"
@@ -13,12 +13,17 @@ const (
 	kMaxHeight = 12
 )
 
+var (
+	defaultComparator cmp.Comparator = cmp.ByteComparator{}
+)
+
 type SkipList struct {
-	head      *Node
-	maxHeight int
-	rand      *rand.Rand
-	arena     *Arena
-	lock      sync.RWMutex
+	head       *Node
+	maxHeight  int
+	rand       *rand.Rand
+	arena      *Arena
+	comparator cmp.Comparator
+	lock       sync.RWMutex
 }
 
 type Node struct {
@@ -82,13 +87,30 @@ func (node *Node) getValue(arena *Arena) []byte {
 
 func NewSkipList(arena *Arena) *SkipList {
 	list := &SkipList{
-		head:      NewNode(arena, &Entry{Key: []byte{0}}, kMaxHeight),
-		maxHeight: 0,
-		rand:      r,
-		arena:     arena,
-		lock:      sync.RWMutex{},
+		head:       NewNode(arena, &Entry{Key: []byte{0}}, kMaxHeight),
+		maxHeight:  0,
+		rand:       r,
+		arena:      arena,
+		comparator: defaultComparator,
+		lock:       sync.RWMutex{},
 	}
 	return list
+}
+
+func NewSkipListWithComparator(arena *Arena, comparator cmp.Comparator) *SkipList {
+	list := &SkipList{
+		head:       NewNode(arena, &Entry{Key: []byte{0}}, kMaxHeight),
+		maxHeight:  0,
+		rand:       r,
+		arena:      arena,
+		comparator: comparator,
+		lock:       sync.RWMutex{},
+	}
+	return list
+}
+
+func (list *SkipList) Close() {
+	list.arena = nil
 }
 
 func (list *SkipList) FindGreaterOrEqual(key []byte, prev []*Node) *Node {
@@ -148,7 +170,7 @@ func (list *SkipList) Search(key []byte) []byte {
 	for i := level; i >= 0; i-- {
 		for next := p.next[i]; next != nil; {
 			if list.KeyIsAfterNode(key, next) {
-				if i == 0 && list.compare(calcScore(key), key, next) == 0 {
+				if i == 0 && list.comparator.Compare(key, next.getKey(list.arena)) == 0 {
 					return next.getValue(list.arena)
 				}
 				break
@@ -166,41 +188,10 @@ func (list *SkipList) GetMaxHeight() int {
 }
 
 func (list *SkipList) KeyIsAfterNode(key []byte, next *Node) bool {
-	if next != nil && list.compare(calcScore(key), key, next) <= 0 {
+	if next != nil && list.comparator.Compare(key, next.getKey(list.arena)) <= 0 {
 		return true
 	}
 	return false
-}
-
-func (list *SkipList) compare(score float64, key []byte, next *Node) int {
-	//if score == next.score {
-	//	return bytes.Compare(key, list.arena.getKey(next.key.keyOffset, next.key.keySize))
-	k, _ := list.arena.getKey(next.keyOffset)
-	return bytes.Compare(key, k)
-	//}
-	//if score < next.score {
-	//	return -1
-	//} else {
-	//	return 1
-	//}
-	//return 0
-}
-
-func calcScore(key []byte) (score float64) {
-	var hash uint64
-	l := len(key)
-
-	if l > 8 {
-		l = 8
-	}
-
-	for i := 0; i < l; i++ {
-		shift := uint(64 - 8 - i*8)
-		hash |= uint64(key[i]) << shift
-	}
-
-	score = float64(hash)
-	return
 }
 
 func (list *SkipList) randomHeight() int {
@@ -212,10 +203,6 @@ func (list *SkipList) randomHeight() int {
 }
 
 func (s *SkipList) Size() int64 { return s.arena.size() }
-
-func (list *SkipList) Close() error {
-	return nil
-}
 
 func (list *SkipList) PrintSkipList() {
 	p := list.head
@@ -243,6 +230,7 @@ func (list *SkipList) NewIterator() *SkipListIterator {
 }
 
 func (iter *SkipListIterator) Next() {
+	AssertTrue(iter.Valid())
 	iter.node = iter.node.next[0]
 }
 
@@ -274,7 +262,8 @@ func (iter *SkipListIterator) Item() Item {
 }
 
 func (iter *SkipListIterator) Close() error {
-	return iter.list.Close()
+	iter.list.Close()
+	return nil
 }
 
 func (iter *SkipListIterator) Seek(key []byte) {

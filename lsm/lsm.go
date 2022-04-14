@@ -2,6 +2,7 @@ package lsm
 
 import (
 	"SimpleKV/utils"
+	"SimpleKV/utils/file"
 )
 
 //Options _
@@ -13,12 +14,15 @@ type Options struct {
 	BlockSize int
 	// BloomFalsePositive is the false positive probabiltiy of bloom filter.
 	BloomFalsePositive float64
+
+	MaxLevelNum int
 }
 
 type LSM struct {
-	memTable   *memTable
-	immutables []*memTable
+	memTable   *MemTable
+	immutables []*MemTable
 	option     *Options
+	lm         *levelManager
 
 	maxMemFID uint32
 }
@@ -26,7 +30,8 @@ type LSM struct {
 // NewLSM _
 func NewLSM(opt *Options) *LSM {
 	lsm := &LSM{option: opt}
-	lsm.memTable = NewMemTable()
+	lsm.lm = lsm.newLevelManager()
+	lsm.memTable = lsm.NewMemTable()
 	return lsm
 }
 
@@ -45,9 +50,13 @@ func (lsm *LSM) Set(entry *utils.Entry) (err error) {
 	}
 
 	// TODO
-	// 检查是否存在immutable需要刷盘，
+	// check immutables
 	for _, immutable := range lsm.immutables {
 		lsm.WriteLevel0Table(immutable)
+		immutable.table.Close()
+	}
+	if len(lsm.immutables) != 0 {
+		lsm.immutables = make([]*MemTable, 0)
 	}
 	return err
 }
@@ -62,24 +71,53 @@ func (lsm *LSM) Get(key []byte) (*utils.Entry, error) {
 		entry *utils.Entry
 		err   error
 	)
-	// 从内存表中查询,先查活跃表，在查不变表
+	// serach from memtable first
 	if entry, err = lsm.memTable.Get(key); entry != nil && entry.Value != nil {
 		return entry, err
 	}
 
-	// TODO search sst
+	// search from immutable, beginning at the newest immutable
+	for i := len(lsm.immutables) - 1; i >= 0; i-- {
+		if entry, err = lsm.immutables[i].Get(key); entry != nil && entry.Value != nil {
+			return entry, err
+		}
+	}
 
+	// TODO search sst
 	return nil, utils.ErrKeyNotFound
+}
+
+// WriteLevel0Table write immutable to sst file
+func (lsm *LSM) WriteLevel0Table(immutable *MemTable) (err error) {
+	// 分配一个fid
+	//fid := mem.wal.Fid()
+	fid := lsm.lm.maxFID
+	sstName := file.FileNameSSTable(lsm.option.WorkDir, fid)
+
+	// 构建一个 builder
+	builder := newTableBuiler(lsm.option)
+	iter := immutable.table.NewIterator()
+	for iter.Rewind(); iter.Valid(); iter.Next() {
+		entry := iter.Item().Entry()
+		builder.add(entry, false)
+	}
+	builder.flush(lsm.lm, sstName)
+	// 创建一个 table 对象
+	//table := NewTable(lm, sstName, builder)
+	//err = lm.manifestFile.AddTableMeta(0, &file.TableMeta{
+	//	ID:       fid,
+	//	Checksum: []byte{'m', 'o', 'c', 'k'},
+	//})
+	// manifest写入失败直接panic
+	//utils.Panic(err)
+	// 更新manifest文件
+	//lsm.lm.levels[0].add(table)
+
+	return
 }
 
 // Rotate append MemTable to immutable, and create a new MemTable
 func (lsm *LSM) Rotate() {
 	lsm.immutables = append(lsm.immutables, lsm.memTable)
-	lsm.memTable = NewMemTable()
-}
-
-// TODO
-func (lsm *LSM) WriteLevel0Table(immutable *memTable) (err error) {
-	// 分配一个fid
-	return nil
+	lsm.memTable = lsm.NewMemTable()
 }

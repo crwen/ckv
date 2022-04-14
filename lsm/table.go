@@ -1,6 +1,8 @@
 package lsm
 
-import "SimpleKV/file"
+import (
+	"SimpleKV/file"
+)
 
 type table struct {
 	ss  *file.SSTable

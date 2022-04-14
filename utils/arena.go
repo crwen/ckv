@@ -28,11 +28,12 @@ type Arena struct {
 }
 
 // newArena returns a new arena.
-func NewArena() *Arena {
+func NewArena(sz int64) *Arena {
 	// Don't store data at position 0 in order to reserve offset=0 as a kind
 	// of nil pointer.
 	arena := &Arena{
-		buf: make([]byte, kBlockSize),
+		//buf: make([]byte, 3*kBlockSize),
+		buf: make([]byte, sz+(1<<10)),
 		//remaining: kBlockSize,
 	}
 	return arena
@@ -49,10 +50,11 @@ func (s *Arena) Allocate(bytes uint32) uint32 {
 		if growBy < bytes {
 			growBy = bytes
 		}
-		buf := make([]byte, growBy)
-		s.buf = append(s.buf, buf...)
-		//newBuf := make([]byte, len(s.buf)+int(growBy))
-		//s.buf = newBuf
+		//buf := make([]byte, growBy)
+		//s.buf = append(s.buf, buf...)
+		newBuf := make([]byte, len(s.buf)+int(growBy))
+		AssertTrue(len(s.buf) == copy(newBuf, s.buf))
+		s.buf = newBuf
 	}
 	return offset - bytes
 	//if bytes <= s.remaining {

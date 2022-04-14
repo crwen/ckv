@@ -8,7 +8,7 @@ import (
 )
 
 func TestCoding(t *testing.T) {
-	arena := NewArena()
+	arena := NewArena(1 << 20)
 
 	for i := 0; i < 10000; i++ {
 		key := []byte("LSMDB@数据库afadfa" + fmt.Sprintf("%06d", i))

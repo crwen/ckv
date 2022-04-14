@@ -1,6 +1,7 @@
-package utils
+package file
 
 import (
+	"SimpleKV/utils"
 	"fmt"
 	"path"
 	"path/filepath"
@@ -8,7 +9,7 @@ import (
 	"strings"
 )
 
-// FID 根据file name 获取其fid
+// FID get fid from file name
 func FID(name string) uint64 {
 	name = path.Base(name)
 	if !strings.HasSuffix(name, ".sst") {
@@ -18,13 +19,13 @@ func FID(name string) uint64 {
 	name = strings.TrimSuffix(name, ".sst")
 	id, err := strconv.Atoi(name)
 	if err != nil {
-		Err(err)
+		utils.Err(err)
 		return 0
 	}
 	return uint64(id)
 }
 
-// FileNameSSTable  sst 文件名
+// FileNameSSTable  join the name of sst
 func FileNameSSTable(dir string, id uint64) string {
 	return filepath.Join(dir, fmt.Sprintf("%05d.sst", id))
 }

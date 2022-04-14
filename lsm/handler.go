@@ -1,6 +1,8 @@
 package lsm
 
-import "sync"
+import (
+	"sync"
+)
 
 type levelHandler struct {
 	sync.RWMutex
