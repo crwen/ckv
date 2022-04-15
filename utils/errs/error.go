@@ -1,4 +1,4 @@
-package utils
+package errs
 
 import (
 	"errors"
@@ -20,6 +20,9 @@ var (
 	ErrKeyNotFound = errors.New("Key not found")
 	// ErrEmptyKey is returned if an empty key is passed on an update function.
 	ErrEmptyKey = errors.New("Key cannot be empty")
+
+	// ErrChecksumMismatch is returned at checksum mismatch.
+	ErrChecksumMismatch = errors.New("checksum mismatch")
 )
 
 // Err err

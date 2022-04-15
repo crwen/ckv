@@ -176,7 +176,6 @@ func TestSkipListIterator(t *testing.T) {
 	}
 
 	iter.Rewind()
-	iter.Next()
 
 	for i := 0; iter.Valid(); i++ {
 		next := iter.Item()

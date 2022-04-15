@@ -1,4 +1,4 @@
-package utils
+package convert
 
 import (
 	"encoding/binary"
@@ -41,4 +41,17 @@ func BytesToU64(b []byte) uint64 {
 // BytesToU64 _
 func BytesToU32(b []byte) uint32 {
 	return binary.BigEndian.Uint32(b)
+}
+
+// BytesToU32Slice converts the given byte slice to uint32 slice
+func BytesToU32Slice(b []byte) []uint32 {
+	if len(b) == 0 {
+		return nil
+	}
+	var u32s []uint32
+	hdr := (*reflect.SliceHeader)(unsafe.Pointer(&u32s))
+	hdr.Len = len(b) / 4
+	hdr.Cap = hdr.Len
+	hdr.Data = uintptr(unsafe.Pointer(&b[0]))
+	return u32s
 }

@@ -1,9 +1,11 @@
-package lsm
+package sstable
 
 import (
 	"SimpleKV/file"
 	"SimpleKV/utils"
 	"SimpleKV/utils/codec"
+	"SimpleKV/utils/convert"
+	"SimpleKV/utils/errs"
 	files "SimpleKV/utils/file"
 	"errors"
 	"fmt"
@@ -14,8 +16,9 @@ import (
 type tableBuilder struct {
 	sstSize       int64
 	curBlock      *Block
-	opt           *Options
+	opt           *utils.Options
 	blockList     []*Block
+	index         *IndexBlock
 	keyCount      uint32
 	keyHashes     []uint32
 	maxVersion    uint64
@@ -31,21 +34,21 @@ type buildData struct {
 	size      int
 }
 
-func newTableBuiler(opt *Options) *tableBuilder {
+func NewTableBuiler(opt *utils.Options) *tableBuilder {
 	return &tableBuilder{
 		opt:     opt,
 		sstSize: opt.SSTableMaxSz,
 	}
 }
 
-func newTableBuilerWithSSTSize(opt *Options, size int64) *tableBuilder {
+func newTableBuilerWithSSTSize(opt *utils.Options, size int64) *tableBuilder {
 	return &tableBuilder{
 		opt:     opt,
 		sstSize: size,
 	}
 }
 
-func (tb *tableBuilder) add(e *utils.Entry, isStale bool) {
+func (tb *tableBuilder) Add(e *utils.Entry, isStale bool) {
 	key := e.Key
 	val := e.Value
 	// 检查是否需要分配一个新的 Block
@@ -57,7 +60,7 @@ func (tb *tableBuilder) add(e *utils.Entry, isStale bool) {
 		tb.finishBlock()
 		// Create a new Block and start writing.
 		tb.curBlock = &Block{
-			data: make([]byte, tb.opt.BlockSize),
+			Data: make([]byte, tb.opt.BlockSize),
 		}
 	}
 
@@ -67,21 +70,21 @@ func (tb *tableBuilder) add(e *utils.Entry, isStale bool) {
 	// +---------------------------+
 
 	var differKey []byte
-	if len(tb.curBlock.baseKey) == 0 {
-		tb.curBlock.baseKey = append(tb.curBlock.baseKey[:0], key...)
+	if len(tb.curBlock.BaseKey) == 0 {
+		tb.curBlock.BaseKey = append(tb.curBlock.BaseKey[:0], key...)
 		differKey = key
 	} else {
 		differKey = tb.keyDiff(key)
 	}
 
-	h := header{
-		overlap: uint16(len(key) - len(differKey)),
-		diff:    uint16(len(differKey)),
+	h := Header{
+		Overlap: uint16(len(key) - len(differKey)),
+		Diff:    uint16(len(differKey)),
 	}
 
-	tb.curBlock.entryOffsets = append(tb.curBlock.entryOffsets, uint32(tb.curBlock.end))
+	tb.curBlock.EntryOffsets = append(tb.curBlock.EntryOffsets, uint32(tb.curBlock.End))
 
-	tb.append(h.encode())
+	tb.append(h.Encode())
 	tb.append(differKey)
 
 	dst := tb.allocate(len(val))
@@ -89,24 +92,21 @@ func (tb *tableBuilder) add(e *utils.Entry, isStale bool) {
 }
 
 // flush flush data to sst file.
-func (tb *tableBuilder) flush(lm *levelManager, tableName string) (t *table, err error) {
+func (tb *tableBuilder) Flush(tableName string) (t *Table, err error) {
 	bd := tb.done()
-	t = &table{
-		ss:  nil,
-		lm:  lm,
-		fid: files.FID(tableName),
-	}
-	t.ss = file.NewSStable(&file.Options{
+	t = newTable(tb.opt, files.FID(tableName))
+
+	t.ss = OpenSStable(&file.Options{
 		FileName: tableName,
-		Dir:      lm.opt.WorkDir,
 		Flag:     os.O_CREATE | os.O_RDWR,
 		MaxSz:    int(bd.size)})
-
+	t.ss.SetIndex(tb.index)
+	t.ss.SetMin(tb.blockList[0].BaseKey)
 	buf := make([]byte, bd.size)
 
 	// copy data that needed
 	written := bd.Copy(buf)
-	utils.CondPanic(written != len(buf), fmt.Errorf("tableBuilder.flush written != len(buf)"))
+	errs.CondPanic(written != len(buf), fmt.Errorf("tableBuilder.flush written != len(buf)"))
 
 	// write to file
 	dst, err := t.ss.Bytes(0, bd.size)
@@ -114,6 +114,10 @@ func (tb *tableBuilder) flush(lm *levelManager, tableName string) (t *table, err
 		return nil, err
 	}
 	copy(dst, buf)
+	t.MinKey = tb.blockList[0].BaseKey
+	if err = t.ss.Close(); err != nil {
+		return t, err
+	}
 	return t, nil
 }
 
@@ -122,15 +126,15 @@ func (bd *buildData) Copy(dst []byte) int {
 	var written int
 	// copy data blocks
 	for _, blk := range bd.blockList {
-		written += copy(dst[written:], blk.data[:blk.end])
+		written += copy(dst[written:], blk.Data[:blk.End])
 	}
 	// copy index and length
 	written += copy(dst[written:], bd.index)
-	written += copy(dst[written:], utils.U32ToBytes(uint32(len(bd.index))))
+	written += copy(dst[written:], convert.U32ToBytes(uint32(len(bd.index))))
 
 	// copy checksum and length
 	written += copy(dst[written:], bd.checksum)
-	written += copy(dst[written:], utils.U32ToBytes(uint32(len(bd.checksum))))
+	written += copy(dst[written:], convert.U32ToBytes(uint32(len(bd.checksum))))
 
 	return written
 }
@@ -138,13 +142,13 @@ func (bd *buildData) Copy(dst []byte) int {
 // append appends to curBlock.data
 func (tb *tableBuilder) append(data []byte) {
 	dst := tb.allocate(len(data))
-	utils.CondPanic(len(data) != copy(dst, data), errors.New("tableBuilder.append data"))
+	errs.CondPanic(len(data) != copy(dst, data), errors.New("tableBuilder.append data"))
 }
 
 func (tb *tableBuilder) keyDiff(newKey []byte) []byte {
 	var i int
-	for i = 0; i < len(newKey) && i < len(tb.curBlock.baseKey); i++ {
-		if newKey[i] != tb.curBlock.baseKey[i] {
+	for i = 0; i < len(newKey) && i < len(tb.curBlock.BaseKey); i++ {
+		if newKey[i] != tb.curBlock.BaseKey[i] {
 			break
 		}
 	}
@@ -155,24 +159,24 @@ func (tb *tableBuilder) tryFinishBlock(e *utils.Entry) bool {
 	if tb.curBlock == nil {
 		return true
 	}
-	if len(tb.curBlock.entryOffsets) <= 0 {
+	if len(tb.curBlock.EntryOffsets) <= 0 {
 		return false
 	}
 
-	utils.CondPanic(!((uint32(len(tb.curBlock.entryOffsets))+1)*4+4+8+4 < math.MaxUint32), errors.New("Integer overflow"))
+	errs.CondPanic(!((uint32(len(tb.curBlock.EntryOffsets))+1)*4+4+8+4 < math.MaxUint32), errors.New("Integer overflow"))
 
-	entryOffSz := int64((len(tb.curBlock.entryOffsets) + 1)) * 4
-	entriesOffsetsSize := entryOffSz +
+	entryOffSz := int64((len(tb.curBlock.EntryOffsets) + 1)) * 4
+	entriesOffsetsSize := entryOffSz + // entry offsets list
 		4 + // size of list
 		8 + // Sum64 in checksum proto
 		4 // checksum length
 	kvSize := int64(6 /*header size for entry*/) +
 		int64(len(e.Key)) + int64(len(e.Value))
-	tb.curBlock.estimateSz = int64(tb.curBlock.end) + kvSize + entriesOffsetsSize
+	tb.curBlock.EstimateSz = int64(tb.curBlock.End) + kvSize + entriesOffsetsSize
 
-	utils.CondPanic(!(uint64(tb.curBlock.end)+uint64(tb.curBlock.estimateSz) < math.MaxUint32), errors.New("Integer overflow"))
+	errs.CondPanic(!(uint64(tb.curBlock.End)+uint64(tb.curBlock.EstimateSz) < math.MaxUint32), errors.New("Integer overflow"))
 
-	return tb.curBlock.estimateSz > int64(tb.opt.BlockSize)
+	return tb.curBlock.EstimateSz > int64(tb.opt.BlockSize)
 }
 
 // finishBlock write other info to Block, e.g. entry offsets, checksum
@@ -180,44 +184,44 @@ func (tb *tableBuilder) tryFinishBlock(e *utils.Entry) bool {
 //  |  kv_data | entryOffsets | entryOff len | checksum | check len |
 //  +---------------------------------------------------------------+
 func (tb *tableBuilder) finishBlock() {
-	if tb.curBlock == nil || len(tb.curBlock.entryOffsets) == 0 {
+	if tb.curBlock == nil || len(tb.curBlock.EntryOffsets) == 0 {
 		return
 	}
 	// Append the entryOffsets and its length.
-	tb.append(utils.U32SliceToBytes(tb.curBlock.entryOffsets))
-	tb.append(utils.U32ToBytes(uint32(len(tb.curBlock.entryOffsets))))
+	tb.append(convert.U32SliceToBytes(tb.curBlock.EntryOffsets))
+	tb.append(convert.U32ToBytes(uint32(len(tb.curBlock.EntryOffsets))))
 
 	// Append the Block checksum and its length.
-	checksum := tb.calculateChecksum(tb.curBlock.data[:tb.curBlock.end])
+	checksum := tb.calculateChecksum(tb.curBlock.Data[:tb.curBlock.End])
 	tb.append(checksum)
-	tb.append(utils.U32ToBytes(uint32(len(checksum))))
+	tb.append(convert.U32ToBytes(uint32(len(checksum))))
 
-	tb.estimateSz += tb.curBlock.estimateSz
+	tb.estimateSz += tb.curBlock.EstimateSz
 	tb.blockList = append(tb.blockList, tb.curBlock)
-	tb.keyCount += uint32(len(tb.curBlock.entryOffsets))
+	tb.keyCount += uint32(len(tb.curBlock.EntryOffsets))
 	tb.curBlock = nil // 表示当前block 已经被序列化到内存
 	return
 }
 
 func (tb *tableBuilder) allocate(need int) []byte {
 	bb := tb.curBlock
-	if len(bb.data[bb.end:]) < need {
+	if len(bb.Data[bb.End:]) < need {
 		// We need to reallocate.
-		sz := 2 * len(bb.data)
-		if bb.end+need > sz {
-			sz = bb.end + need
+		sz := 2 * len(bb.Data)
+		if bb.End+need > sz {
+			sz = bb.End + need
 		}
 		tmp := make([]byte, sz) // todo 这里可以使用内存分配器来提升性能
-		copy(tmp, bb.data)
-		bb.data = tmp
+		copy(tmp, bb.Data)
+		bb.Data = tmp
 	}
-	bb.end += need
-	return bb.data[bb.end-need : bb.end]
+	bb.End += need
+	return bb.Data[bb.End-need : bb.End]
 }
 
 func (tb *tableBuilder) calculateChecksum(data []byte) []byte {
 	checkSum := codec.CalculateChecksum(data)
-	return utils.U64ToBytes(checkSum)
+	return convert.U64ToBytes(checkSum)
 }
 
 func (tb *tableBuilder) done() buildData {
@@ -249,30 +253,31 @@ func (tb *tableBuilder) done() buildData {
 
 func (tb *tableBuilder) buildIndex(bloom []byte) ([]byte, uint32) {
 	index := &IndexBlock{
-		blockOffsets: make([]*BlockOffset, len(tb.blockList)),
-		filter:       nil,
-		keyCount:     tb.keyCount,
+		BlockOffsets: make([]*BlockOffset, len(tb.blockList)),
+		Filter:       nil,
+		KeyCount:     tb.keyCount,
 	}
 	var indexSize int
 	if len(bloom) > 0 {
-		index.filter = bloom
+		index.Filter = bloom
 		indexSize += len(bloom)
 	}
-	var dataSize uint32
 	var offset uint32
+	var dataSize uint32
 	for i, blk := range tb.blockList {
-		index.blockOffsets[i] = &BlockOffset{
-			Key:    blk.baseKey,
+		index.BlockOffsets[i] = &BlockOffset{
+			Key:    blk.BaseKey,
 			Offset: offset,
-			Len:    uint32(blk.end),
+			Len:    uint32(blk.End),
 		}
-		indexSize += len(blk.baseKey) + 4 + 4
-		offset += uint32(blk.end)
-		dataSize += uint32(blk.end)
+		indexSize += len(blk.BaseKey) + 4 + 4
+		offset += uint32(blk.End)
+		dataSize += uint32(blk.End)
 	}
-	index.keyCount = tb.keyCount
+	index.KeyCount = tb.keyCount
 	indexSize += 4
 
+	tb.index = index
 	return tb.finishIndexBlock(index, indexSize), dataSize
 }
 
@@ -281,20 +286,20 @@ func (tb *tableBuilder) finishIndexBlock(index *IndexBlock, size int) []byte {
 	buf := make([]byte, size)
 	// Append the block offsets
 	off := 0
-	offsets := index.blockOffsets
+	offsets := index.BlockOffsets
 	for i := range offsets {
-		off += copy(buf[off:], utils.U32ToBytes(offsets[i].Offset))
+		off += copy(buf[off:], convert.U32ToBytes(offsets[i].Offset))
 		off += copy(buf[off:], offsets[i].Key)
-		off += copy(buf[off:], utils.U32ToBytes(offsets[i].Len))
+		off += copy(buf[off:], convert.U32ToBytes(offsets[i].Len))
 	}
 
 	// Append the bloom filter
-	off += copy(buf[off:], index.filter)
+	off += copy(buf[off:], index.Filter)
 
 	// Append the max version
-	off += copy(buf[off:], utils.U64ToBytes(tb.maxVersion))
+	off += copy(buf[off:], convert.U64ToBytes(tb.maxVersion))
 	// Append key count
-	off += copy(buf[off:], utils.U32ToBytes(tb.keyCount))
+	off += copy(buf[off:], convert.U32ToBytes(tb.keyCount))
 
 	return buf
 }

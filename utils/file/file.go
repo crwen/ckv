@@ -1,7 +1,7 @@
 package file
 
 import (
-	"SimpleKV/utils"
+	"SimpleKV/utils/errs"
 	"fmt"
 	"path"
 	"path/filepath"
@@ -19,7 +19,7 @@ func FID(name string) uint64 {
 	name = strings.TrimSuffix(name, ".sst")
 	id, err := strconv.Atoi(name)
 	if err != nil {
-		utils.Err(err)
+		errs.Err(err)
 		return 0
 	}
 	return uint64(id)

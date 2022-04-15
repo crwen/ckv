@@ -240,7 +240,7 @@ func (iter *SkipListIterator) Valid() bool {
 }
 
 func (iter *SkipListIterator) Rewind() {
-	iter.node = iter.list.head
+	iter.node = iter.list.head.next[0]
 }
 
 func (iter *SkipListIterator) Key() []byte {

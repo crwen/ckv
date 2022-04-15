@@ -18,7 +18,7 @@ func (lsm *LSM) NewMemTable() *MemTable {
 
 	atomic.AddUint64(&(lsm.lm.maxFID), 1)
 
-	return &MemTable{table: utils.NewSkipList(arena), arena: arena}
+	return &MemTable{table: utils.NewSkipListWithComparator(arena, lsm.option.Comparable), arena: arena}
 }
 
 func (mem MemTable) set(entry *utils.Entry) error {

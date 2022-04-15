@@ -16,7 +16,7 @@ type Item interface {
 }
 
 // Options _
-type Options struct {
-	Prefix []byte
-	IsAsc  bool
-}
+//type Options struct {
+//	Prefix []byte
+//	IsAsc  bool
+//}

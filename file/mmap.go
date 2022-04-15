@@ -2,6 +2,7 @@ package file
 
 import (
 	"SimpleKV/utils/file"
+	"fmt"
 	"github.com/pkg/errors"
 	"io"
 	"os"
@@ -76,6 +77,27 @@ func OpenMmapFile(filename string, flag int, maxSz int) (*MmapFile, error) {
 		maxSz = int(fileInfo.Size())
 	}
 	return OpenMmapFileUsing(fd, maxSz, writable)
+}
+
+// Close would close the file. It would also truncate the file if maxSz >= 0.
+func (m *MmapFile) Close() error {
+	if m.Fd == nil {
+		return nil
+	}
+	if err := m.Sync(); err != nil {
+		return fmt.Errorf("while sync file: %s, error: %v\n", m.Fd.Name(), err)
+	}
+	if err := file.Munmap(m.Data); err != nil {
+		return fmt.Errorf("while munmap file: %s, error: %v\n", m.Fd.Name(), err)
+	}
+	return m.Fd.Close()
+}
+
+func (m *MmapFile) Sync() error {
+	if m == nil {
+		return nil
+	}
+	return file.Msync(m.Data)
 }
 
 func SyncDir(dir string) error {

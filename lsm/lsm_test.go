@@ -2,20 +2,22 @@ package lsm
 
 import (
 	"SimpleKV/utils"
-	"bytes"
+	"SimpleKV/utils/cmp"
 	"fmt"
+	"github.com/stretchr/testify/assert"
 	"os"
 	"testing"
 )
 
 var (
 	// 初始化opt
-	opt = &Options{
+	opt = &utils.Options{
 		WorkDir:            "../work_test",
 		SSTableMaxSz:       1 << 14, // 16K
-		MemTableSize:       1 << 12, // 16K
+		MemTableSize:       1 << 14, // 16K
 		BlockSize:          1 << 10, // 1K
 		BloomFalsePositive: 0,
+		MaxLevelNum:        7,
 	}
 )
 
@@ -24,8 +26,8 @@ func TestLSM_Set(t *testing.T) {
 	lsm := NewLSM(opt)
 
 	e := &utils.Entry{
-		Key:       []byte("CRTS😁数据库MrGSBtL12345678"),
-		Value:     []byte("KV入门"),
+		Key:       []byte("😁数据库🐂🐎"),
+		Value:     []byte("KV入门◀◘◙█Ε｡.:*❉ﾟ･*:.｡.｡.:*･゜❆ﾟ･*｡.:*❉ﾟ･*:.｡.｡.★═━┈┈ ☆══━━─－－　☆══━━─－"),
 		ExpiresAt: 123,
 	}
 	lsm.Set(e)
@@ -39,42 +41,29 @@ func TestLSM_Set(t *testing.T) {
 
 func TestLSM_CRUD(t *testing.T) {
 	clearDir()
+	comparable := cmp.ByteComparator{}
+	opt.Comparable = comparable
 	lsm := NewLSM(opt)
 
-	e := &utils.Entry{
-		Key:       []byte("CRTS😁数据库MrGSBtL12345678"),
-		Value:     []byte("KV入门"),
-		ExpiresAt: 123,
-	}
-	lsm.Set(e)
-
-	for i := 1; i < 100; i++ {
-		e := utils.BuildEntry()
+	for i := 0; i < 5000; i++ {
+		e := &utils.Entry{
+			Key:   []byte(fmt.Sprintf("%04d", i)),
+			Value: []byte(fmt.Sprintf("%04d", i)),
+		}
 		lsm.Set(e)
-		if v, err := lsm.Get(e.Key); err != nil {
-			panic(err)
-		} else if !bytes.Equal(e.Value, v.Value) {
-			err = fmt.Errorf("lsm.Get(e.Key) value not equal !!!")
-			panic(err)
-		}
 	}
-	for i := 1; i < 100; i++ {
-		e := utils.BuildEntry()
-		if v, err := lsm.Get(e.Key); err != nil {
-			panic(err)
-		} else if !bytes.Equal(e.Value, v.Value) {
-			err = fmt.Errorf("lsm.Get(e.Key) value not equal !!!")
-			panic(err)
-		}
-	}
-	fmt.Println(lsm.memTable.Size() / 1024)
-	//if v, err := lsm.Get(e.Key); err != nil {
-	//	panic(err)
-	//} else if !bytes.Equal(e.Value, v.Value) {
-	//	err = fmt.Errorf("lsm.Get(e.Key) value not equal !!!")
-	//	panic(err)
-	//}
 
+	for i := 0; i < 5000; i++ {
+		e := &utils.Entry{
+			Key:   []byte(fmt.Sprintf("%04d", i)),
+			Value: []byte(fmt.Sprintf("%04d", i)),
+		}
+		v, err := lsm.Get(e.Key)
+		if err != nil {
+			panic(err)
+		}
+		assert.Equal(t, e.Value, v.Value)
+	}
 }
 
 func clearDir() {

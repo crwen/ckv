@@ -1,7 +1,10 @@
 package codec
 
 import (
+	"SimpleKV/utils/convert"
+	"SimpleKV/utils/errs"
 	"encoding/binary"
+	"github.com/pkg/errors"
 	"hash/crc32"
 )
 
@@ -77,4 +80,15 @@ func DecodeVarint64(buf []byte) uint64 {
 // CalculateChecksum _
 func CalculateChecksum(data []byte) uint64 {
 	return uint64(crc32.Checksum(data, CastagnoliCrcTable))
+}
+
+// VerifyChecksum crc32
+func VerifyChecksum(data []byte, expected []byte) error {
+	actual := uint64(crc32.Checksum(data, CastagnoliCrcTable))
+	expectedU64 := convert.BytesToU64(expected)
+	if actual != expectedU64 {
+		return errors.Wrapf(errs.ErrChecksumMismatch, "actual: %d, expected: %d", actual, expectedU64)
+	}
+
+	return nil
 }
