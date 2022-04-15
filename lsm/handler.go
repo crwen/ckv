@@ -43,6 +43,7 @@ func (lh *levelHandler) searchL0SST(key []byte) (*utils.Entry, error) {
 		if t != nil && comparator.Compare(t.MinKey, key) <= 0 &&
 			comparator.Compare(t.MaxKey, key) >= 0 {
 			if entry, err := t.Serach(key); err == nil && entry != nil {
+
 				return entry, nil
 			}
 		}

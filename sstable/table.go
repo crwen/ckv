@@ -2,8 +2,6 @@ package sstable
 
 import (
 	"SimpleKV/utils"
-	"SimpleKV/utils/codec"
-	"SimpleKV/utils/convert"
 	"SimpleKV/utils/errs"
 	"os"
 )
@@ -60,7 +58,7 @@ func (t *Table) Serach(key []byte) (entry *utils.Entry, err error) {
 	buf := make([]byte, size)
 	f.ReadAt(buf, int64(offset))
 
-	block.offset = int(offset)
+	block.Offset = int(offset)
 	block.Data = buf
 
 	offset = block.readEntryOffsets(buf)
@@ -82,51 +80,6 @@ func (t *Table) Serach(key []byte) (entry *utils.Entry, err error) {
 	}
 	return nil, nil
 
-}
-
-// readEntryOffsets return the start offset of first entry offsets
-func (b *Block) readEntryOffsets(buf []byte) uint32 {
-	// read checksum and length
-	offset := len(buf) - 4
-	b.checksumLen = int(convert.BytesToU32(buf[offset:]))
-	offset -= b.checksumLen
-	b.checksum = buf[offset : offset+b.checksumLen] // read checksum
-	if err := codec.VerifyChecksum(buf[:offset], b.checksum); err != nil {
-		//return nil, err
-	}
-
-	// read entry offsets and length
-	offset -= 4
-	numEntries := convert.BytesToU32(buf[offset : offset+4])
-	offset -= int(numEntries) * 4
-	b.EntryOffsets = convert.BytesToU32Slice(buf[offset : offset+int(numEntries)*4])
-
-	// read kv data
-	b.Data = buf[:offset]
-	return uint32(offset)
-	//buf = buf[:offset]
-
-}
-
-func (b *Block) readEntry(buf []byte, sz uint32) (key, value []byte) {
-	entryData := buf[:4] // header
-	h := &Header{}
-	h.decode(entryData)
-	overlap := h.Overlap
-	diff := h.Diff
-
-	diffKey := buf[4 : 4+diff] // read diff key
-	if len(b.BaseKey) == 0 {
-		b.BaseKey = diffKey
-		key = b.BaseKey
-	} else {
-		k := make([]byte, overlap+diff)
-		copy(k, b.BaseKey[:overlap])
-		copy(k[overlap:], diffKey)
-		key = k
-	}
-	value = buf[4+diff : sz]
-	return key, value
 }
 
 // findGreaterOrEqual

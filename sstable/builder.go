@@ -84,7 +84,7 @@ func (tb *tableBuilder) Add(e *utils.Entry, isStale bool) {
 
 	tb.curBlock.EntryOffsets = append(tb.curBlock.EntryOffsets, uint32(tb.curBlock.End))
 
-	tb.append(h.Encode())
+	tb.append(h.encode())
 	tb.append(differKey)
 
 	dst := tb.allocate(len(val))
