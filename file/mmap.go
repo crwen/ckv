@@ -1,7 +1,6 @@
 package file
 
 import (
-	"SimpleKV/utils/file"
 	"fmt"
 	"github.com/pkg/errors"
 	"io"
@@ -43,7 +42,7 @@ func OpenMmapFileUsing(fd *os.File, sz int, writable bool) (*MmapFile, error) {
 	}
 
 	// fmt.Printf("Mmaping file: %s with writable: %v filesize: %d\n", fd.Name(), writable, fileSize)
-	buf, err := file.Mmap(fd, writable, fileSize) // Mmap up to file size.
+	buf, err := Mmap(fd, writable, fileSize) // Mmap up to file size.
 	if err != nil {
 		return nil, errors.Wrapf(err, "while mmapping %s with size: %d", fd.Name(), fileSize)
 	}
@@ -87,7 +86,7 @@ func (m *MmapFile) Close() error {
 	if err := m.Sync(); err != nil {
 		return fmt.Errorf("while sync file: %s, error: %v\n", m.Fd.Name(), err)
 	}
-	if err := file.Munmap(m.Data); err != nil {
+	if err := Munmap(m.Data); err != nil {
 		return fmt.Errorf("while munmap file: %s, error: %v\n", m.Fd.Name(), err)
 	}
 	return m.Fd.Close()
@@ -97,7 +96,7 @@ func (m *MmapFile) Sync() error {
 	if m == nil {
 		return nil
 	}
-	return file.Msync(m.Data)
+	return Msync(m.Data)
 }
 
 func SyncDir(dir string) error {

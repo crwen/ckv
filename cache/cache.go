@@ -1,6 +1,8 @@
 package cache
 
-import "SimpleKV/sstable"
+import (
+	"SimpleKV/sstable"
+)
 
 type Cache struct {
 	index Replacer

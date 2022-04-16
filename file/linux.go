@@ -3,6 +3,7 @@ package file
 import (
 	"golang.org/x/sys/unix"
 	"os"
+	"reflect"
 	"unsafe"
 )
 
@@ -41,4 +42,34 @@ func munmap(data []byte) error {
 // msync writes any modified data to persistent storage.
 func msync(b []byte) error {
 	return unix.Msync(b, unix.MS_SYNC)
+}
+
+// mremap is a Linux-specific system call to remap pages in memory. This can be used in place of munmap + mmap.
+func mremap(data []byte, size int) ([]byte, error) {
+	// taken from <https://github.com/torvalds/linux/blob/f8394f232b1eab649ce2df5c5f15b0e528c92091/include/uapi/linux/mman.h#L8>
+	const MREMAP_MAYMOVE = 0x1
+
+	header := (*reflect.SliceHeader)(unsafe.Pointer(&data))
+	mmapAddr, _, errno := unix.Syscall6(
+		unix.SYS_MREMAP,
+		header.Data,
+		uintptr(header.Len),
+		uintptr(size),
+		uintptr(MREMAP_MAYMOVE),
+		0,
+		0,
+	)
+	if errno != 0 {
+		return nil, errno
+	}
+
+	header.Data = mmapAddr
+	header.Cap = size
+	header.Len = size
+	return data, nil
+}
+
+// Mremap unmmap and mmap
+func Mremap(data []byte, size int) ([]byte, error) {
+	return mremap(data, size)
 }

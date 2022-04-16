@@ -92,3 +92,17 @@ func VerifyChecksum(data []byte, expected []byte) error {
 
 	return nil
 }
+
+func CalculateU32Checksum(data []byte) uint32 {
+	return crc32.Checksum(data, CastagnoliCrcTable)
+}
+
+// VerifyU32Checksum crc32
+func VerifyU32Checksum(data []byte, expected uint32) error {
+	actual := crc32.Checksum(data, CastagnoliCrcTable)
+	if actual != expected {
+		return errors.Wrapf(errs.ErrChecksumMismatch, "actual: %d, expected: %d", actual, expected)
+	}
+
+	return nil
+}

@@ -1,11 +1,16 @@
 package lsm
 
 import (
+	"SimpleKV/file"
 	"SimpleKV/sstable"
 	"SimpleKV/utils"
 	"SimpleKV/utils/cmp"
 	"SimpleKV/utils/errs"
-	"SimpleKV/utils/file"
+	"io/ioutil"
+	"os"
+	"sort"
+	"strconv"
+	"strings"
 )
 
 var (
@@ -30,7 +35,9 @@ func NewLSM(opt *utils.Options) *LSM {
 	}
 	lsm := &LSM{option: opt}
 	lsm.lm = lsm.newLevelManager()
-	lsm.memTable = lsm.NewMemTable()
+	// recovery
+	lsm.memTable, lsm.immutables = lsm.recovery()
+	//lsm.memTable = lsm.NewMemTable()
 	return lsm
 }
 
@@ -52,7 +59,7 @@ func (lsm *LSM) Set(entry *utils.Entry) (err error) {
 	// check immutables
 	for _, immutable := range lsm.immutables {
 		lsm.WriteLevel0Table(immutable)
-		immutable.table.Close()
+		immutable.close()
 	}
 	if len(lsm.immutables) != 0 {
 		lsm.immutables = make([]*MemTable, 0)
@@ -89,7 +96,7 @@ func (lsm *LSM) Get(key []byte) (*utils.Entry, error) {
 func (lsm *LSM) WriteLevel0Table(immutable *MemTable) (err error) {
 	// 分配一个fid
 	//fid := mem.wal.Fid()
-	fid := lsm.lm.maxFID
+	fid := immutable.wal.Fid()
 	sstName := file.FileNameSSTable(lsm.option.WorkDir, fid)
 
 	// 构建一个 builder
@@ -118,6 +125,66 @@ func (lsm *LSM) WriteLevel0Table(immutable *MemTable) (err error) {
 func (lsm *LSM) Rotate() {
 	lsm.immutables = append(lsm.immutables, lsm.memTable)
 	lsm.memTable = lsm.NewMemTable()
+}
+
+func (lsm *LSM) recovery() (*MemTable, []*MemTable) {
+	files, err := ioutil.ReadDir(lsm.option.WorkDir)
+	if err != nil {
+		errs.Panic(err)
+		return nil, nil
+	}
+	var fids []uint64
+	maxFID := lsm.lm.maxFID
+	// find wal files
+	for _, file := range files {
+		if !strings.HasSuffix(file.Name(), walFileExt) {
+			continue
+		}
+		sz := len(file.Name())
+		fid, err := strconv.ParseUint(file.Name()[:sz-len(walFileExt)], 10, 64)
+		if maxFID < fid {
+			maxFID = fid
+		}
+		if err != nil {
+			errs.Panic(err)
+			return nil, nil
+		}
+		fids = append(fids, fid)
+	}
+	// sort ase
+	sort.Slice(fids, func(i, j int) bool {
+		return fids[i] < fids[j]
+	})
+	imms := []*MemTable{}
+	for _, fid := range fids {
+		mt, err := lsm.openMemTable(fid)
+		errs.CondPanic(err != nil, err)
+		if mt.table.Size() == 0 {
+			continue
+		}
+		imms = append(imms, mt)
+	}
+	lsm.lm.maxFID = maxFID
+	return lsm.NewMemTable(), imms
+}
+
+func (lsm *LSM) openMemTable(fid uint64) (*MemTable, error) {
+	fileOpt := &file.Options{
+		Dir:      lsm.option.WorkDir,
+		Flag:     os.O_CREATE | os.O_RDWR,
+		MaxSz:    int(lsm.option.MemTableSize),
+		FID:      fid,
+		FileName: mtFilePath(lsm.option.WorkDir, fid),
+	}
+	//mt := lsm.NewMemTable()
+	arena := utils.NewArena(1 << 20)
+	mt := &MemTable{
+		table: utils.NewSkipListWithComparator(arena, lsm.option.Comparable),
+		arena: arena,
+	}
+	mt.wal = OpenWalFile(fileOpt)
+	mt.wal.Iterate(mt.recoveryMemTable(lsm.option))
+	return mt, nil
 }
 
 func Compare(a, b []byte) int {

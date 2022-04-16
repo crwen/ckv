@@ -6,7 +6,6 @@ import (
 	"SimpleKV/utils/codec"
 	"SimpleKV/utils/convert"
 	"SimpleKV/utils/errs"
-	files "SimpleKV/utils/file"
 	"errors"
 	"fmt"
 	"math"
@@ -94,7 +93,7 @@ func (tb *tableBuilder) Add(e *utils.Entry, isStale bool) {
 // flush flush data to sst file.
 func (tb *tableBuilder) Flush(tableName string) (t *Table, err error) {
 	bd := tb.done()
-	t = newTable(tb.opt, files.FID(tableName))
+	t = newTable(tb.opt, file.FID(tableName))
 
 	t.ss = OpenSStable(&file.Options{
 		FileName: tableName,

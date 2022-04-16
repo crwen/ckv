@@ -33,14 +33,26 @@ func U64ToBytes(v uint64) []byte {
 	return uBuf[:]
 }
 
+// U32ToBytes converts the given Uint16 to bytes
+func U16ToBytes(v uint16) []byte {
+	var uBuf [2]byte
+	binary.BigEndian.PutUint16(uBuf[:], v)
+	return uBuf[:]
+}
+
 // BytesToU64 _
 func BytesToU64(b []byte) uint64 {
 	return binary.BigEndian.Uint64(b)
 }
 
-// BytesToU64 _
+// BytesToU32 _
 func BytesToU32(b []byte) uint32 {
 	return binary.BigEndian.Uint32(b)
+}
+
+// BytesToU16 _
+func BytesToU16(b []byte) uint16 {
+	return binary.BigEndian.Uint16(b)
 }
 
 // BytesToU32Slice converts the given byte slice to uint32 slice
