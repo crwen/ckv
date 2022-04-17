@@ -71,10 +71,10 @@ func TestSkipListBasicCRUD(t *testing.T) {
 func Benchmark_SkipListBasicCRUD(b *testing.B) {
 	list := NewSkipList(NewArena(1 << 20))
 	key, val := "", ""
-	maxTime := 10000
+	maxTime := 1000
 	for i := 0; i < maxTime; i++ {
 		//number := rand.Intn(10000)
-		key, val = fmt.Sprintf("Key%d", i), fmt.Sprintf("Val%d", i)
+		key, val = fmt.Sprintf("Key%0130d", i), fmt.Sprintf("Val%0130d", i)
 		entry := NewEntry([]byte(key), []byte(val))
 		res := list.Add(entry)
 		assert.Equal(b, res, nil)

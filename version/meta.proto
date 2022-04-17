@@ -1,0 +1,10 @@
+syntax = "proto3";
+
+package version;
+
+message FileMetaData{
+  uint64 id = 1;
+  bytes smallest = 2;
+  bytes  largest = 3;
+}
+

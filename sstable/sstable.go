@@ -3,6 +3,7 @@ package sstable
 import (
 	"SimpleKV/file"
 	"SimpleKV/utils/errs"
+	"io"
 	"os"
 	"sync"
 )
@@ -17,6 +18,25 @@ type SSTable struct {
 	fid    uint64
 	minKey []byte
 	maxKey []byte
+}
+
+func (ss *SSTable) read(off, sz int) ([]byte, error) {
+	if len(ss.f.Data) > 0 {
+		if len(ss.f.Data[off:]) < sz {
+			return nil, io.EOF
+		}
+		return ss.f.Data[off : off+sz], nil
+	}
+
+	res := make([]byte, sz)
+	_, err := ss.f.Fd.ReadAt(res, int64(off))
+	return res, err
+}
+
+func (ss *SSTable) readCheckError(off, sz int) []byte {
+	buf, err := ss.read(off, sz)
+	errs.Panic(err)
+	return buf
 }
 
 //func NewSStable(opt *Options) *SSTable {

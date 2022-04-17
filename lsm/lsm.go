@@ -6,6 +6,7 @@ import (
 	"SimpleKV/utils"
 	"SimpleKV/utils/cmp"
 	"SimpleKV/utils/errs"
+	"SimpleKV/version"
 	"io/ioutil"
 	"os"
 	"sort"
@@ -22,8 +23,8 @@ type LSM struct {
 	immutables []*MemTable
 	option     *utils.Options
 	lm         *levelManager
-
-	maxMemFID uint32
+	verSet     *version.VersionSet
+	maxMemFID  uint32
 }
 
 // NewLSM _
@@ -88,8 +89,8 @@ func (lsm *LSM) Get(key []byte) (*utils.Entry, error) {
 			return entry, err
 		}
 	}
-
-	return lsm.lm.Get(key)
+	return lsm.verSet.Get(key)
+	//return lsm.lm.Get(key)
 }
 
 // WriteLevel0Table write immutable to sst file
@@ -115,8 +116,12 @@ func (lsm *LSM) WriteLevel0Table(immutable *MemTable) (err error) {
 	}
 
 	// TODO update manifest
+	ve := version.NewVersionEdit()
+	ve.AddFile(0, t)
+	lsm.verSet.LogAndApply(ve)
 
-	lsm.lm.levels[0].add(t)
+	lsm.verSet.Add(0, t)
+	//lsm.lm.levels[0].add(t)
 
 	return
 }

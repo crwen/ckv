@@ -1,8 +1,13 @@
 package sstable
 
 import (
+	"SimpleKV/file"
 	"SimpleKV/utils"
+	"SimpleKV/utils/codec"
+	"SimpleKV/utils/convert"
 	"SimpleKV/utils/errs"
+	"github.com/golang/protobuf/proto"
+	"github.com/pkg/errors"
 	"os"
 )
 
@@ -23,6 +28,19 @@ func newTable(opt *utils.Options, fid uint64) *Table {
 	}
 }
 
+func OpenTable(opt *utils.Options, fid uint64) *Table {
+	fileName := file.FileNameSSTable(opt.WorkDir, fid)
+	t := &Table{fid: fid, opt: opt}
+	t.ss = OpenSStable(&file.Options{
+		FID:      fid,
+		FileName: fileName,
+		Dir:      opt.WorkDir,
+		Flag:     os.O_CREATE | os.O_RDWR,
+		MaxSz:    int(opt.SSTableMaxSz),
+	})
+	return t
+}
+
 type tableIterator struct {
 	it       utils.Item
 	opt      *utils.Options
@@ -33,11 +51,8 @@ type tableIterator struct {
 }
 
 func (t *Table) Serach(key []byte) (entry *utils.Entry, err error) {
-	f, err := os.OpenFile(t.ss.GetName(), os.O_RDONLY, 644)
-	defer f.Close()
-	if err != nil {
-		return nil, err
-	}
+
+	f := t.ss.f
 
 	index := t.ss.Indexs()
 	filter := utils.Filter(index.Filter)
@@ -55,8 +70,12 @@ func (t *Table) Serach(key []byte) (entry *utils.Entry, err error) {
 	offset := blockOffset.Offset
 	size := blockOffset.Len
 
-	buf := make([]byte, size)
-	f.ReadAt(buf, int64(offset))
+	//buf := make([]byte, size)
+	buf, err := f.Bytes(int(offset), int(size))
+	if err != nil {
+
+	}
+	//f.ReadAt(buf, int64(offset))
 
 	block.Offset = int(offset)
 	block.Data = buf
@@ -104,4 +123,44 @@ func (t *Table) findGreater(index *IndexBlock, key []byte) int {
 
 func (t *Table) Compare(key, key2 []byte) int {
 	return t.opt.Comparable.Compare(key, key2)
+}
+
+func (t *Table) Fid() uint64 {
+	return t.fid
+}
+
+func (t *Table) Index() *IndexBlock {
+	return t.ss.Indexs()
+}
+
+func (t *Table) SetIndex(index *IndexBlock) {
+	t.ss.indexBlock = index
+}
+
+func (t *Table) ReadIndex() (*IndexBlock, error) {
+
+	readPos := len(t.ss.f.Data) - 4
+	checksumLen := convert.BytesToU32(t.ss.readCheckError(readPos, 4)) // checksum length
+	readPos -= int(checksumLen)
+	checksum := t.ss.readCheckError(readPos, int(checksumLen))
+
+	readPos -= 4
+	indexLen := convert.BytesToU32(t.ss.readCheckError(readPos, 4))
+	readPos -= int(indexLen)
+
+	// read index
+	data := t.ss.readCheckError(readPos, int(indexLen))
+	if err := codec.VerifyChecksum(data, checksum); err != nil {
+		return nil, errors.Wrapf(err, "failed to verify checksum for table: %s", t.ss.f.Fd.Name())
+	}
+
+	index := &IndexBlock{}
+	err := proto.Unmarshal(data, index)
+	//index := &IndexBlock{
+	//	BlockOffsets: make([]*BlockOffset, len(tb.blockList)),
+	//	Filter:       nil,
+	//	KeyCount:     tb.keyCount,
+	//}
+
+	return index, err
 }

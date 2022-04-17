@@ -73,6 +73,29 @@ func DecodeVarint64(buf []byte) uint64 {
 	return v
 }
 
+// | length | key |
+func EncodeKey(key []byte) []byte {
+	keySize := len(key)
+	sz := VarintLength(uint64(keySize))
+	buf := make([]byte, sz+keySize)
+	w := EncodeVarint32(buf, uint32(keySize))
+	copy(buf[w:], key)
+	w += len(key)
+	return buf
+}
+
+func DecodeKey(buf []byte) []byte {
+	keySize := DecodeVarint32(buf)
+	sz := VarintLength(uint64(keySize))
+	return buf[sz : sz+keySize]
+}
+
+func DecodeTo(buf []byte) []byte {
+	keySize := DecodeVarint32(buf)
+	sz := VarintLength(uint64(keySize))
+	return buf[sz : sz+keySize]
+}
+
 //func EncodeFixed64(buf []byte, v uint64) int {
 //
 //}

@@ -8,6 +8,7 @@ import (
 	"SimpleKV/utils/errs"
 	"errors"
 	"fmt"
+	"github.com/golang/protobuf/proto"
 	"math"
 	"os"
 )
@@ -117,6 +118,7 @@ func (tb *tableBuilder) Flush(tableName string) (t *Table, err error) {
 	if err = t.ss.Close(); err != nil {
 		return t, err
 	}
+	t.ss.f.Close()
 	return t, nil
 }
 
@@ -282,23 +284,25 @@ func (tb *tableBuilder) buildIndex(bloom []byte) ([]byte, uint32) {
 
 func (tb *tableBuilder) finishIndexBlock(index *IndexBlock, size int) []byte {
 
-	buf := make([]byte, size)
-	// Append the block offsets
-	off := 0
-	offsets := index.BlockOffsets
-	for i := range offsets {
-		off += copy(buf[off:], convert.U32ToBytes(offsets[i].Offset))
-		off += copy(buf[off:], offsets[i].Key)
-		off += copy(buf[off:], convert.U32ToBytes(offsets[i].Len))
-	}
+	buf, _ := proto.Marshal(index)
 
-	// Append the bloom filter
-	off += copy(buf[off:], index.Filter)
-
-	// Append the max version
-	off += copy(buf[off:], convert.U64ToBytes(tb.maxVersion))
-	// Append key count
-	off += copy(buf[off:], convert.U32ToBytes(tb.keyCount))
+	//buf := make([]byte, size)
+	//// Append the block offsets
+	//off := 0
+	//offsets := index.BlockOffsets
+	//for i := range offsets {
+	//	off += copy(buf[off:], convert.U32ToBytes(offsets[i].Offset))
+	//	off += copy(buf[off:], offsets[i].Key)
+	//	off += copy(buf[off:], convert.U32ToBytes(offsets[i].Len))
+	//}
+	//
+	//// Append the bloom filter
+	//off += copy(buf[off:], index.Filter)
+	//
+	//// Append the max version
+	//off += copy(buf[off:], convert.U64ToBytes(tb.maxVersion))
+	//// Append key count
+	//off += copy(buf[off:], convert.U32ToBytes(tb.keyCount))
 
 	return buf
 }

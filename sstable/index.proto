@@ -1,0 +1,15 @@
+syntax = "proto3";
+
+package sstable;
+
+message IndexBlock{
+  repeated BlockOffset BlockOffsets = 1;
+  bytes  Filter = 2;
+  uint32 KeyCount = 3;
+}
+
+message BlockOffset{
+  bytes Key = 1;
+  uint32 Offset = 2;
+  uint32 Len = 3;
+}

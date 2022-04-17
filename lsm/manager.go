@@ -4,12 +4,14 @@ import (
 	"SimpleKV/cache"
 	"SimpleKV/sstable"
 	"SimpleKV/utils"
+	"SimpleKV/version"
 )
 
 type levelManager struct {
 	maxFID uint64 // 已经分配出去的最大fid，只要创建了memtable 就算已分配
 	opt    *utils.Options
 	levels []*levelHandler
+	verSet *version.VersionSet
 	cache  *cache.Cache
 	lsm    *LSM
 }
@@ -30,5 +32,7 @@ func (lsm *LSM) newLevelManager() *levelManager {
 			lm:       lm,
 		})
 	}
+	lsm.verSet, _ = version.Open(lm.opt)
+
 	return lm
 }

@@ -42,7 +42,8 @@ func (lh *levelHandler) searchL0SST(key []byte) (*utils.Entry, error) {
 	for _, t := range lh.tables {
 		if t != nil && comparator.Compare(t.MinKey, key) <= 0 &&
 			comparator.Compare(t.MaxKey, key) >= 0 {
-			if entry, err := t.Serach(key); err == nil && entry != nil {
+			table := lh.lm.lsm.verSet.FindTable(t.Fid())
+			if entry, err := table.Serach(key); err == nil && entry != nil {
 
 				return entry, nil
 			}

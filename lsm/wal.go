@@ -120,6 +120,7 @@ func (wal *WalFile) Iterate(fn func(e *utils.Entry) error) (uint32, error) {
 		if err != nil {
 			break
 		}
+		//fmt.Println(string(key), string(value))
 	}
 	return 1, nil
 }

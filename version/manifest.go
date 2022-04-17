@@ -1,6 +1,7 @@
 package version
 
 import (
+	"SimpleKV/sstable"
 	"SimpleKV/utils"
 	"os"
 	"path/filepath"
@@ -14,8 +15,25 @@ const (
 type Manifest struct {
 	opt    *utils.Options
 	f      *os.File
-	levels map[uint64]uint8    // fid -> level
+	levels [][]*FileMetaData   // level -> table
 	tables map[uint64]struct{} // fid -> table
+}
+
+// FileMetaData sstable info
+type FileMetaData struct {
+	//refs int
+	allowedSeeks int // seeks allowed until compaction
+	number       uint64
+	id           uint64
+	fileSize     uint64 // file size in bytes
+	largest      []byte // largest key served by table
+	smallest     []byte // smallest key served by table
+}
+
+func (fm *FileMetaData) UpdateMeta(t *sstable.Table) {
+	fm.smallest = t.MinKey
+	fm.largest = t.MaxKey
+	fm.fileSize = 0
 }
 
 func NewManifest(opt *utils.Options) (*Manifest, error) {
@@ -26,7 +44,7 @@ func NewManifest(opt *utils.Options) (*Manifest, error) {
 		return nil, err
 	}
 	m.f = f
-	m.levels = make(map[uint64]uint8)
+	m.levels = make([][]*FileMetaData, opt.MaxLevelNum)
 	m.tables = make(map[uint64]struct{})
 	return m, err
 }
