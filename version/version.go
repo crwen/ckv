@@ -13,16 +13,19 @@ type Version struct {
 	tables map[uint64]struct{} // fid -> table
 
 	//refs int
-	vset  *VersionSet
-	next  *Version
-	prev  *Version
-	files []map[uint64]*FileMetaData
+	vset *VersionSet
+	next *Version
+	prev *Version
+	//files []map[uint64]*FileMetaData
+	files [][]*FileMetaData
 }
 
 func NewVersion(opt *utils.Options) *Version {
-	files := make([]map[uint64]*FileMetaData, opt.MaxLevelNum)
+	//files := make([]map[uint64]*FileMetaData, opt.MaxLevelNum)
+	files := make([][]*FileMetaData, opt.MaxLevelNum)
 	for i := 0; i < opt.MaxLevelNum; i++ {
-		files[i] = map[uint64]*FileMetaData{}
+		//files[i] = map[uint64]*FileMetaData{}
+		files[i] = make([]*FileMetaData, 0)
 	}
 	return &Version{
 		opt:    opt,
@@ -64,5 +67,17 @@ func (v *Version) log(level int, fileMetaData *FileMetaData, op uint16) {
 	//if _, err := v.f.Write(largest); err != nil {
 	//	panic(err)
 	//}
+	//log.Printf("write sst %d to level %d. smallest: %s, largest: %s\n", fileMetaData.id, level,
+	//	string(fileMetaData.smallest), string(fileMetaData.largest))
 
+}
+
+func (v *Version) deleteFile(level uint16, meta *FileMetaData) {
+	numFiles := len(v.files[level])
+	for i := 0; i < numFiles; i++ {
+		if v.files[level][i].id == meta.id {
+			v.files[level] = append(v.files[level][:i], v.files[level][i+1:]...)
+			break
+		}
+	}
 }

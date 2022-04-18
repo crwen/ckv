@@ -41,7 +41,7 @@ func TestLSM_Set(t *testing.T) {
 
 func TestLSM_CRUD(t *testing.T) {
 	clearDir()
-	comparable := cmp.ByteComparator{}
+	comparable := cmp.IntComparator{}
 	opt.Comparable = comparable
 	lsm := NewLSM(opt)
 
@@ -52,11 +52,18 @@ func TestLSM_CRUD(t *testing.T) {
 		}
 		lsm.Set(e)
 	}
+	for i := 0; i < 5000; i++ {
+		e := &utils.Entry{
+			Key:   []byte(fmt.Sprintf("%d", i)),
+			Value: []byte(fmt.Sprintf("%d", i+1)),
+		}
+		lsm.Set(e)
+	}
 
 	for i := 0; i < 5000; i++ {
 		e := &utils.Entry{
 			Key:   []byte(fmt.Sprintf("%d", i)),
-			Value: []byte(fmt.Sprintf("%d", i)),
+			Value: []byte(fmt.Sprintf("%d", i+1)),
 		}
 		v, err := lsm.Get(e.Key)
 		if err != nil {

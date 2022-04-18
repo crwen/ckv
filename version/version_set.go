@@ -127,9 +127,10 @@ func (vs *VersionSet) Replay() {
 
 		switch op {
 		case VersionEdit_CREATE:
-			current.files[level][fm.id] = fm
+			current.files[level] = append(current.files[level], fm)
 		case VersionEdit_DELETE:
-			delete(current.files[level], fm.id)
+			current.deleteFile(level, fm)
+			//delete(current.files[level], fm.id)
 		}
 	}
 
@@ -141,18 +142,13 @@ func (vs *VersionSet) Replay() {
 
 func (vs *VersionSet) Add(level int, t *sstable.Table) {
 
-	vs.current.files[level][t.Fid()] = &FileMetaData{
+	meta := &FileMetaData{
 		id:       t.Fid(),
 		largest:  t.MaxKey,
 		smallest: t.MinKey,
 	}
+	vs.current.files[level] = append(vs.current.files[level], meta)
 	vs.tableCache.AddIndex(t.Fid(), t.Index())
-}
-func (vs *VersionSet) GetIndex(fid uint64) *sstable.IndexBlock {
-	return vs.tableCache.GetIndex(fid)
-}
-func (vs *VersionSet) AddIndex(fid uint64, index *sstable.IndexBlock) {
-	vs.tableCache.AddIndex(fid, index)
 }
 
 func (vs *VersionSet) FindTable(fid uint64) *sstable.Table {
@@ -178,6 +174,10 @@ func (vs *VersionSet) Get(key []byte) (*utils.Entry, error) {
 		return entry, nil
 	}
 	// TODO serach LN
+
+	if entry, err := vs.searchLNSST(key); err == nil && entry != nil {
+		return entry, nil
+	}
 	return nil, nil
 }
 
@@ -201,6 +201,23 @@ func (vs *VersionSet) searchL0SST(key []byte) (*utils.Entry, error) {
 		}
 	}
 
+	return nil, errs.ErrKeyNotFound
+}
+
+func (vs *VersionSet) searchLNSST(key []byte) (*utils.Entry, error) {
+	current := vs.current
+	//cmp := current.opt.Comparable
+	for level := 1; level < current.opt.MaxLevelNum; level++ {
+		idx := current.findFile(current.files[level], key)
+		if idx >= len(current.files[level]) {
+			continue
+		}
+		meta := current.files[level][idx]
+		table := vs.FindTable(meta.id)
+		if entry, err := table.Serach(key); err == nil && entry != nil {
+			return entry, nil
+		}
+	}
 	return nil, errs.ErrKeyNotFound
 }
 

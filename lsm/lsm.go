@@ -116,12 +116,15 @@ func (lsm *LSM) WriteLevel0Table(immutable *MemTable) (err error) {
 		errs.Panic(err)
 	}
 
+	//level := 0
+	level := lsm.verSet.PickLevelForMemTableOutput(t.MinKey, t.MaxKey)
+
 	// TODO update manifest
 	ve := version.NewVersionEdit()
-	ve.AddFile(0, t)
+	ve.AddFile(level, t)
 	lsm.verSet.LogAndApply(ve)
 
-	lsm.verSet.Add(0, t)
+	lsm.verSet.Add(level, t)
 	//lsm.lm.levels[0].add(t)
 
 	return
