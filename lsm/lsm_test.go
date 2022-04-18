@@ -47,16 +47,16 @@ func TestLSM_CRUD(t *testing.T) {
 
 	for i := 0; i < 5000; i++ {
 		e := &utils.Entry{
-			Key:   []byte(fmt.Sprintf("%04d", i)),
-			Value: []byte(fmt.Sprintf("%04d", i)),
+			Key:   []byte(fmt.Sprintf("%d", i)),
+			Value: []byte(fmt.Sprintf("%d", i)),
 		}
 		lsm.Set(e)
 	}
 
 	for i := 0; i < 5000; i++ {
 		e := &utils.Entry{
-			Key:   []byte(fmt.Sprintf("%04d", i)),
-			Value: []byte(fmt.Sprintf("%04d", i)),
+			Key:   []byte(fmt.Sprintf("%d", i)),
+			Value: []byte(fmt.Sprintf("%d", i)),
 		}
 		v, err := lsm.Get(e.Key)
 		if err != nil {

@@ -22,9 +22,9 @@ type LSM struct {
 	memTable   *MemTable
 	immutables []*MemTable
 	option     *utils.Options
-	lm         *levelManager
-	verSet     *version.VersionSet
-	maxMemFID  uint32
+	//lm         *levelManager
+	verSet *version.VersionSet
+	maxFID uint64
 }
 
 // NewLSM _
@@ -35,7 +35,8 @@ func NewLSM(opt *utils.Options) *LSM {
 		opt.Comparable = cmp.ByteComparator{}
 	}
 	lsm := &LSM{option: opt}
-	lsm.lm = lsm.newLevelManager()
+	lsm.verSet, _ = version.Open(lsm.option)
+	//lsm.lm = lsm.newLevelManager()
 	// recovery
 	lsm.memTable, lsm.immutables = lsm.recovery()
 	//lsm.memTable = lsm.NewMemTable()
@@ -139,7 +140,7 @@ func (lsm *LSM) recovery() (*MemTable, []*MemTable) {
 		return nil, nil
 	}
 	var fids []uint64
-	maxFID := lsm.lm.maxFID
+	maxFID := lsm.maxFID
 	// find wal files
 	for _, file := range files {
 		if !strings.HasSuffix(file.Name(), walFileExt) {
@@ -169,7 +170,7 @@ func (lsm *LSM) recovery() (*MemTable, []*MemTable) {
 		}
 		imms = append(imms, mt)
 	}
-	lsm.lm.maxFID = maxFID
+	lsm.maxFID = maxFID
 	return lsm.NewMemTable(), imms
 }
 
