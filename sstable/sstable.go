@@ -15,9 +15,10 @@ type SSTable struct {
 	indexBlock     *IndexBlock
 	hasBloomFilter bool
 
-	fid    uint64
-	minKey []byte
-	maxKey []byte
+	fileSize uint64
+	fid      uint64
+	minKey   []byte
+	maxKey   []byte
 }
 
 func (ss *SSTable) read(off, sz int) ([]byte, error) {
@@ -98,4 +99,9 @@ func (ss *SSTable) GetName() string {
 
 func (ss *SSTable) GetFid() uint64 {
 	return ss.fid
+}
+
+// Detele _
+func (ss *SSTable) Detele() error {
+	return ss.f.Delete()
 }

@@ -30,10 +30,11 @@ type FileMetaData struct {
 	smallest     []byte // smallest key served by table
 }
 
-func (fm *FileMetaData) UpdateMeta(t *sstable.Table) {
-	fm.smallest = t.MinKey
-	fm.largest = t.MaxKey
-	fm.fileSize = 0
+func (meta *FileMetaData) UpdateMeta(t *sstable.Table) {
+	meta.smallest = t.MinKey
+	meta.largest = t.MaxKey
+	meta.fileSize = t.Size()
+	meta.id = t.Fid()
 }
 
 func NewManifest(opt *utils.Options) (*Manifest, error) {

@@ -24,7 +24,7 @@ type LSM struct {
 	option     *utils.Options
 	//lm         *levelManager
 	verSet *version.VersionSet
-	maxFID uint64
+	//maxFID uint64
 }
 
 // NewLSM _
@@ -41,6 +41,12 @@ func NewLSM(opt *utils.Options) *LSM {
 	lsm.memTable, lsm.immutables = lsm.recovery()
 	//lsm.memTable = lsm.NewMemTable()
 	return lsm
+}
+
+func (lsm *LSM) IncreaseFid(delta uint64) uint64 {
+	//newFid := atomic.AddUint64(&(lsm.maxFID), delta)
+
+	return lsm.verSet.Increase(delta)
 }
 
 // Set _
@@ -143,7 +149,7 @@ func (lsm *LSM) recovery() (*MemTable, []*MemTable) {
 		return nil, nil
 	}
 	var fids []uint64
-	maxFID := lsm.maxFID
+	maxFID := lsm.verSet.NextFileNumber
 	// find wal files
 	for _, file := range files {
 		if !strings.HasSuffix(file.Name(), walFileExt) {
@@ -173,7 +179,7 @@ func (lsm *LSM) recovery() (*MemTable, []*MemTable) {
 		}
 		imms = append(imms, mt)
 	}
-	lsm.maxFID = maxFID
+	lsm.verSet.NextFileNumber = maxFID
 	return lsm.NewMemTable(), imms
 }
 

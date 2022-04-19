@@ -6,6 +6,10 @@ import (
 	"os"
 )
 
+const (
+	L0_CompactionTrigger = 5
+)
+
 type Version struct {
 	opt    *utils.Options
 	f      *os.File
@@ -80,4 +84,44 @@ func (v *Version) deleteFile(level uint16, meta *FileMetaData) {
 			break
 		}
 	}
+}
+
+func (v *Version) pickCompactionLevel() int {
+
+	baseLevel := 0
+	var score float64
+	var bestScore float64
+	for i := 0; i < v.opt.MaxLevelNum; i++ {
+		if i == 0 {
+			score = float64(len(v.files[0])) / float64(L0_CompactionTrigger)
+		} else {
+			score = float64(totalFileSize(v.files[i])) / maxBytesForLevel(i)
+		}
+
+		if score > bestScore {
+			bestScore = score
+			baseLevel = i
+		}
+	}
+
+	return baseLevel
+}
+
+func maxBytesForLevel(level int) float64 {
+
+	//result := 10. * 1048576.0 // 10M for level 1
+	result := 1. * 1048576.0
+	for level > 1 {
+		result *= 10
+		level--
+	}
+	return result
+}
+
+func totalFileSize(files []*FileMetaData) uint64 {
+	var size uint64
+	for _, file := range files {
+		size += file.fileSize
+	}
+	return size
 }

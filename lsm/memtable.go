@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"sync/atomic"
 )
 
 type MemTable struct {
@@ -20,7 +19,8 @@ type MemTable struct {
 func (lsm *LSM) NewMemTable() *MemTable {
 	arena := utils.NewArena(lsm.option.MemTableSize)
 
-	newFid := atomic.AddUint64(&(lsm.maxFID), 1)
+	//newFid := atomic.AddUint64(&(lsm.maxFID), 1)
+	newFid := lsm.IncreaseFid(1)
 	fileOpt := &file.Options{
 		FID:      newFid,
 		FileName: mtFilePath(lsm.option.WorkDir, newFid),

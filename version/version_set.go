@@ -7,9 +7,12 @@ import (
 	"SimpleKV/utils/convert"
 	"SimpleKV/utils/errs"
 	"bufio"
+	"io"
 	"os"
 	"path/filepath"
 	"sort"
+	"sync"
+	"sync/atomic"
 )
 
 const (
@@ -18,13 +21,14 @@ const (
 )
 
 type VersionSet struct {
-	nextFileNumber     uint64
+	NextFileNumber     uint64
 	manifestFileNumber uint64
 	logNumber          uint64
 
 	head       *Version
 	current    *Version
 	tableCache *cache.Cache
+	lock       sync.RWMutex
 }
 
 func Open(opt *utils.Options) (*VersionSet, error) {
@@ -50,7 +54,7 @@ func NewVersionSet(opt *utils.Options) *VersionSet {
 	if err != nil {
 		return nil
 	}
-	vs := &VersionSet{}
+	vs := &VersionSet{lock: sync.RWMutex{}}
 	current := NewVersion(opt)
 	current.vset = vs
 	current.f = f
@@ -72,10 +76,11 @@ func (vs *VersionSet) LogAndApply(ve *VersionEdit) {
 func (vs *VersionSet) Replay() {
 	current := vs.current
 	r := bufio.NewReader(current.f)
+	//io.ReadFull()
 
 	for {
 		buf := make([]byte, 16)
-		_, err := r.Read(buf)
+		_, err := io.ReadFull(r, buf)
 		if err != nil {
 			break
 		}
@@ -85,20 +90,20 @@ func (vs *VersionSet) Replay() {
 		fm.id = convert.BytesToU64(buf[4:12])
 		ssz := convert.BytesToU32(buf[12:])
 		smallest := make([]byte, ssz)
-		_, err = r.Read(smallest)
+		_, err = io.ReadFull(r, smallest)
 		if err != nil {
 			break
 		}
 		fm.smallest = smallest
 
 		buf = make([]byte, 4)
-		_, err = r.Read(buf)
+		_, err = io.ReadFull(r, buf)
 		if err != nil {
 			break
 		}
 		lsz := convert.BytesToU32(buf)
 		largest := make([]byte, lsz)
-		_, err = r.Read(largest)
+		_, err = io.ReadFull(r, largest)
 		if err != nil {
 			break
 		}
@@ -132,23 +137,37 @@ func (vs *VersionSet) Replay() {
 			current.deleteFile(level, fm)
 			//delete(current.files[level], fm.id)
 		}
+		//fmt.Printf("level %d, op %d, fid:%d, %s %s\n", level, op, fm.id, string(fm.smallest), string(fm.largest))
 	}
-
-	//for _, data := range current.files[0] {
-	//	fmt.Println(data.id, string(data.smallest), string(data.largest))
+	//fmt.Println("=================")
+	//for i, data := range current.files {
+	//	fmt.Printf("level %d has %d files\n", i, len(data))
 	//}
 
 }
 
 func (vs *VersionSet) Add(level int, t *sstable.Table) {
-
+	vs.lock.Lock()
+	defer vs.lock.Unlock()
 	meta := &FileMetaData{
 		id:       t.Fid(),
 		largest:  t.MaxKey,
 		smallest: t.MinKey,
+		fileSize: t.Size(),
 	}
 	vs.current.files[level] = append(vs.current.files[level], meta)
 	vs.tableCache.AddIndex(t.Fid(), t.Index())
+}
+
+func (vs *VersionSet) Delete(level int, t *sstable.Table) {
+
+	for i := 0; i < len(vs.current.files[level]); i++ {
+		if vs.current.files[level][i].id == t.Fid() {
+			vs.current.files[level] = append(vs.current.files[level][0:i], vs.current.files[level][i+1:]...)
+			break
+		}
+	}
+	//vs.tableCache.AddIndex(t.Fid(), t.Index())
 }
 
 func (vs *VersionSet) FindTable(fid uint64) *sstable.Table {
@@ -170,6 +189,8 @@ func (vs *VersionSet) FindTable(fid uint64) *sstable.Table {
 }
 
 func (vs *VersionSet) Get(key []byte) (*utils.Entry, error) {
+	vs.lock.RLock()
+	defer vs.lock.RUnlock()
 	if entry, err := vs.searchL0SST(key); err == nil && entry != nil {
 		return entry, nil
 	}
@@ -219,6 +240,12 @@ func (vs *VersionSet) searchLNSST(key []byte) (*utils.Entry, error) {
 		}
 	}
 	return nil, errs.ErrKeyNotFound
+}
+
+func (vs *VersionSet) Increase(delta uint64) uint64 {
+
+	newFid := atomic.AddUint64(&(vs.NextFileNumber), delta)
+	return newFid
 }
 
 //func (vs *VersionSet) Get(key []byte) (*utils.Entry, error) {

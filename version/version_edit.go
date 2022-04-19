@@ -29,6 +29,17 @@ func (ve *VersionEdit) AddFile(level int, t *sstable.Table) {
 		id:       t.Fid(),
 		largest:  t.MaxKey,
 		smallest: t.MinKey,
+		fileSize: t.Size(),
 	}
 	ve.adds = append(ve.adds, &TableMeta{f: fm, level: level})
+}
+
+func (ve *VersionEdit) DeleteFile(level int, t *sstable.Table) {
+	fm := &FileMetaData{
+		id:       t.Fid(),
+		largest:  t.MaxKey,
+		smallest: t.MinKey,
+		fileSize: t.Size(),
+	}
+	ve.deletes = append(ve.deletes, &TableMeta{f: fm, level: level})
 }

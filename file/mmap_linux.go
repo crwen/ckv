@@ -57,3 +57,21 @@ func (m *MmapFile) Truncature(maxSz int64) error {
 	m.Data, err = Mremap(m.Data, int(maxSz)) // Mmap up to max size.
 	return err
 }
+
+func (m *MmapFile) Delete() error {
+	if m.Fd == nil {
+		return nil
+	}
+
+	if err := Munmap(m.Data); err != nil {
+		return fmt.Errorf("while munmap file: %s, error: %v\n", m.Fd.Name(), err)
+	}
+	m.Data = nil
+	if err := m.Fd.Truncate(0); err != nil {
+		return fmt.Errorf("while truncate file: %s, error: %v\n", m.Fd.Name(), err)
+	}
+	if err := m.Fd.Close(); err != nil {
+		return fmt.Errorf("while close file: %s, error: %v\n", m.Fd.Name(), err)
+	}
+	return os.Remove(m.Fd.Name())
+}

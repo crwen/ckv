@@ -115,6 +115,7 @@ func (tb *tableBuilder) Flush(tableName string) (t *Table, err error) {
 	}
 	copy(dst, buf)
 	t.MinKey = tb.blockList[0].BaseKey
+	t.ss.fileSize = uint64(bd.size)
 	if err = t.ss.Close(); err != nil {
 		return t, err
 	}

@@ -26,7 +26,7 @@ func TestLSM_Set(t *testing.T) {
 	lsm := NewLSM(opt)
 
 	e := &utils.Entry{
-		Key:       []byte("😁数据库🐂🐎"),
+		Key:       []byte("TBS😁数据库🐧🐧🐧🐂🍃🐎🏀🍎"),
 		Value:     []byte("KV入门◀◘◙█Ε｡.:*❉ﾟ･*:.｡.｡.:*･゜❆ﾟ･*｡.:*❉ﾟ･*:.｡.｡.★═━┈┈ ☆══━━─－－　☆══━━─－"),
 		ExpiresAt: 123,
 	}
@@ -71,6 +71,7 @@ func TestLSM_CRUD(t *testing.T) {
 		}
 		assert.Equal(t, e.Value, v.Value)
 	}
+
 }
 
 func TestWAL(t *testing.T) {
@@ -100,7 +101,7 @@ func TestWAL(t *testing.T) {
 // run
 func TestLWAL_Read(t *testing.T) {
 	//clearDir()
-	TestWAL(t)
+	//TestWAL(t)
 	lsm := NewLSM(opt)
 	//ee := &utils.Entry{
 	//	Key:   []byte(fmt.Sprintf("%d", 480)),
@@ -125,6 +126,30 @@ func TestLWAL_Read(t *testing.T) {
 			panic(err)
 		}
 		assert.Equal(t, ee.Value, v.Value)
+	}
+
+}
+
+func TestCompactiont(t *testing.T) {
+	clearDir()
+	comparable := cmp.IntComparator{}
+	opt.Comparable = comparable
+	lsm := NewLSM(opt)
+	go lsm.verSet.RunCompact()
+
+	for i := 0; i < 10000; i++ {
+		e := &utils.Entry{
+			Key:   []byte(fmt.Sprintf("%0128d", i)),
+			Value: []byte(fmt.Sprintf("%0128d", i)),
+		}
+		lsm.Set(e)
+	}
+	for i := 0; i < 10000; i++ {
+		e := &utils.Entry{
+			Key:   []byte(fmt.Sprintf("%0128d", i)),
+			Value: []byte(fmt.Sprintf("%0128d", i+1)),
+		}
+		lsm.Set(e)
 	}
 
 }

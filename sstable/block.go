@@ -1,16 +1,19 @@
 package sstable
 
 import (
+	"SimpleKV/utils"
+	"SimpleKV/utils/cmp"
 	"SimpleKV/utils/codec"
 	"SimpleKV/utils/convert"
+	"io"
 	"unsafe"
 )
 
 type Block struct {
-	Offset           int
-	checksum         []byte
-	entiresIndexStar int
-	checksumLen      int
+	Offset            int
+	checksum          []byte
+	entriesIndexStart int
+	checksumLen       int
 
 	Data []byte
 	//restart []uint32
@@ -66,15 +69,6 @@ func (b *Block) readEntryOffsets(buf []byte) uint32 {
 
 }
 
-//type BlockBuilder struct {
-//	offset int
-//
-//	data    []byte
-//	restart []uint32
-//	counter int
-//	lastKey []byte
-//}
-
 type Header struct {
 	Overlap uint16
 	Diff    uint16
@@ -100,34 +94,100 @@ type BlockIterator struct {
 	entryOffsets []uint32
 	end          int
 	estimateSz   int64
+	err          error
+	idx          int
+	key          []byte
+	val          []byte
+	it           utils.Item
+	cmp          cmp.Comparator
 }
 
-//func (iter *BlockIterator) Next() {
-//	//TODO implement me
-//	panic("implement me")
-//}
-//
-//func (iter *BlockIterator) Valid() bool {
-//	//TODO implement me
-//	panic("implement me")
-//}
-//
-//func (iter *BlockIterator) Rewind() {
-//	//TODO implement me
-//	panic("implement me")
-//}
-//
-//func (iter *BlockIterator) Item() utils.Item {
-//	//TODO implement me
-//	panic("implement me")
-//}
-//
-//func (iter *BlockIterator) Close() error {
-//	//TODO implement me
-//	panic("implement me")
-//}
-//
-//func (iter *BlockIterator) Seek(key []byte) {
-//	//TODO implement me
-//	panic("implement me")
-//}
+func (iter *BlockIterator) setBlock(b *Block, cmp cmp.Comparator) {
+	iter.block = b
+	iter.err = nil
+	iter.idx = -1
+	iter.baseKey = iter.baseKey[:0]
+	//itr.prevOverlap = 0
+	iter.key = iter.key[:0]
+	iter.val = iter.val[:0]
+	// Drop the index from the block. We don't need it anymore.
+	iter.data = b.Data[:b.entriesIndexStart]
+	iter.entryOffsets = b.EntryOffsets
+	iter.cmp = cmp
+}
+
+func (iter *BlockIterator) setIdx(idx int) {
+	iter.idx = idx
+	if iter.idx >= len(iter.entryOffsets) || iter.idx < 0 {
+		iter.err = io.EOF
+		return
+	}
+	if iter.idx == len(iter.block.EntryOffsets)-1 {
+		iter.key, iter.val = iter.block.readEntry(
+			iter.block.Data[iter.block.EntryOffsets[iter.idx]:],
+			uint32(iter.block.entriesIndexStart)-iter.block.EntryOffsets[iter.idx])
+	} else {
+		iter.key, iter.val = iter.block.readEntry(
+			iter.block.Data[iter.block.EntryOffsets[iter.idx]:],
+			iter.block.EntryOffsets[iter.idx+1]-iter.block.EntryOffsets[iter.idx])
+	}
+	e := &utils.Entry{
+		Key:   iter.key,
+		Value: iter.val,
+	}
+	iter.it = e
+}
+
+func (iter *BlockIterator) Next() {
+	iter.setIdx(iter.idx + 1)
+}
+
+func (iter *BlockIterator) Valid() bool {
+	return iter.err != io.EOF
+}
+
+func (iter *BlockIterator) Rewind() {
+	iter.setIdx(-1)
+}
+
+func (iter *BlockIterator) Item() utils.Item {
+	return iter.it
+}
+
+func (iter *BlockIterator) Close() error {
+	return nil
+}
+func (itr *BlockIterator) Error() error {
+	return itr.err
+}
+
+func (iter *BlockIterator) Seek(key []byte) {
+	iter.err = nil
+	for i := 0; i < len(iter.block.EntryOffsets); i++ {
+		iter.setIdx(i)
+		if iter.cmp.Compare(iter.key, key) >= 0 {
+			break
+		}
+	}
+	//startIndex := 0 // This tells from which index we should start binary search.
+	//
+	//foundEntryIdx := sort.Search(len(iter.entryOffsets), func(idx int) bool {
+	//	// If idx is less than start index then just return false.
+	//	if idx < startIndex {
+	//		return false
+	//	}
+	//	iter.setIdx(idx)
+	//	return iter.cmp.Compare(iter.key, key) >= 0
+	//})
+	//
+	//iter.setIdx(foundEntryIdx)
+}
+
+// seekToFirst brings us to the first element.
+func (itr *BlockIterator) seekToFirst() {
+	itr.setIdx(0)
+}
+
+func (itr *BlockIterator) seekToLast() {
+	itr.setIdx(len(itr.entryOffsets) - 1)
+}
