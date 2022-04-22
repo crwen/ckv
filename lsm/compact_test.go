@@ -55,12 +55,6 @@ func TestMerge(t *testing.T) {
 	table = lsm.verSet.FindTable(uint64(2))
 	iters = append(iters, table.NewIterator(lsm.option))
 
-	//iter := iters[0]
-	//for iter.Rewind(); iter.Valid(); iter.Next() {
-	//	entry := iter.Item().Entry()
-	//	fmt.Println(string(entry.Key), string(entry.Value))
-	//}
-
 	iter := version.NewMergeIterator(iters, opt.Comparable)
 	var entry *utils.Entry
 	for iter.Rewind(); iter.Valid(); iter.Next() {

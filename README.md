@@ -2,14 +2,14 @@ A simple kv based on LSM
 
 There are still many things to do...
 
-layout of key/value in aren:
+**layout of key/value in aren:**
 
 ![kv](./doc/img/kv.png)
 
-layout of sst:
+**layout of sst:**
 
 ![sst](./doc/img/sst.png)
 
-layout of manifest:
+**layout of manifest:**
 
 ![manifest](./doc/img/manifest.png)
