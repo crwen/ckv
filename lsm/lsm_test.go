@@ -52,18 +52,18 @@ func TestLSM_CRUD(t *testing.T) {
 		}
 		lsm.Set(e)
 	}
-	for i := 0; i < 5000; i++ {
-		e := &utils.Entry{
-			Key:   []byte(fmt.Sprintf("%d", i)),
-			Value: []byte(fmt.Sprintf("%d", i+1)),
-		}
-		lsm.Set(e)
-	}
+	//for i := 0; i < 5000; i++ {
+	//	e := &utils.Entry{
+	//		Key:   []byte(fmt.Sprintf("%d", i)),
+	//		Value: []byte(fmt.Sprintf("%d", i+1)),
+	//	}
+	//	lsm.Set(e)
+	//}
 
 	for i := 0; i < 5000; i++ {
 		e := &utils.Entry{
 			Key:   []byte(fmt.Sprintf("%d", i)),
-			Value: []byte(fmt.Sprintf("%d", i+1)),
+			Value: []byte(fmt.Sprintf("%d", i)),
 		}
 		v, err := lsm.Get(e.Key)
 		if err != nil {
@@ -116,16 +116,19 @@ func TestLWAL_Read(t *testing.T) {
 		Value: []byte(fmt.Sprintf("%d", 1111)),
 	}
 	lsm.Set(e)
-	for i := 0; i < 5000; i++ {
-		ee := &utils.Entry{
-			Key:   []byte(fmt.Sprintf("%d", i)),
+
+	for i := 0; i <= 5000; i++ {
+		e := &utils.Entry{
+			//Key:   []byte(fmt.Sprintf("%0128d", i)),
+			Key: []byte(fmt.Sprintf("%d", i)),
+			//Value: []byte(fmt.Sprintf("%0128d", i+1)),
 			Value: []byte(fmt.Sprintf("%d", i)),
 		}
-		v, err := lsm.Get(ee.Key)
+		v, err := lsm.Get(e.Key)
 		if err != nil {
 			panic(err)
 		}
-		assert.Equal(t, ee.Value, v.Value)
+		assert.Equal(t, e.Value, v.Value)
 	}
 
 }
@@ -135,7 +138,9 @@ func TestCompactiont(t *testing.T) {
 	comparable := cmp.IntComparator{}
 	opt.Comparable = comparable
 	lsm := NewLSM(opt)
-	go lsm.verSet.RunCompact()
+	for i := 0; i < 5; i++ {
+		go lsm.verSet.RunCompact()
+	}
 
 	for i := 0; i < 10000; i++ {
 		e := &utils.Entry{

@@ -56,7 +56,7 @@ func (vs *VersionSet) compact(id int) {
 	}
 	log.Println("Compact begin")
 	defer log.Println("Compaction end")
-	var iters []utils.Iterator
+	var iters []sstable.TableIterator
 	for _, meta := range c.base {
 		id := meta.id
 		t := vs.FindTable(id)

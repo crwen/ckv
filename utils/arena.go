@@ -2,6 +2,7 @@ package utils
 
 import (
 	"SimpleKV/utils/codec"
+	"SimpleKV/utils/convert"
 	"github.com/pkg/errors"
 	"log"
 	"sync/atomic"
@@ -34,7 +35,7 @@ func NewArena(sz int64) *Arena {
 	// of nil pointer.
 	arena := &Arena{
 		//buf: make([]byte, 3*kBlockSize),
-		buf: make([]byte, sz+(1<<10)),
+		buf: make([]byte, sz+(1<<20)),
 		//remaining: kBlockSize,
 	}
 	return arena
@@ -143,6 +144,14 @@ func (s *Arena) PutKey(key []byte, offset uint32) uint32 {
 	w := codec.EncodeVarint32(buf, uint32(keySize))
 	AssertTrue(len(key) == copy(buf[w:], key))
 	w += len(key)
+	//w += codec.EncodeVarint64(buf[w:], uint64(time.Now().Unix()))
+	return uint32(w)
+}
+
+func (s *Arena) PutSeq(seq uint64, offset uint32) uint32 {
+	buf := s.buf[offset:]
+	w := copy(buf, convert.U64ToBytes(seq))
+	//w := codec.EncodeVarint64(buf[:], seq)
 	return uint32(w)
 }
 
@@ -175,7 +184,15 @@ func (s *Arena) getKey(offset uint32) ([]byte, int) {
 	buf := s.buf[offset:]
 	sz := codec.DecodeVarint32(buf)
 	keyOff := codec.VarintLength(uint64(sz))
-	return buf[keyOff : keyOff+sz], sz
+	seq := make([]byte, 8)
+	codec.DecodeVarint64(seq)
+	return buf[keyOff : keyOff+sz], sz + 8
+}
+
+func (s *Arena) getSeq(offset uint32) uint64 {
+	buf := s.buf[offset : offset+8]
+	//return codec.DecodeVarint64(buf[:])
+	return convert.BytesToU64(buf)
 }
 
 func (s *Arena) GetKey(offset uint32) ([]byte, int) {
@@ -186,6 +203,10 @@ func (s *Arena) GetKey(offset uint32) ([]byte, int) {
 func (s *Arena) GetVal(offset uint32) ([]byte, int) {
 	//DecodeValue(s.buf[offset : offset+size])
 	return s.getVal(offset)
+}
+func (s *Arena) GetSeq(offset uint32) uint64 {
+	buf := s.buf[offset:]
+	return codec.DecodeVarint64(buf[:])
 }
 
 // getKey returns byte slice at offset.

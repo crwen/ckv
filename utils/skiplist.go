@@ -8,6 +8,7 @@ import (
 	"log"
 	"math/rand"
 	"sync"
+	"sync/atomic"
 )
 
 const (
@@ -16,6 +17,7 @@ const (
 
 var (
 	defaultComparator cmp.Comparator = cmp.ByteComparator{}
+	seq               uint64
 )
 
 type SkipList struct {
@@ -30,6 +32,7 @@ type SkipList struct {
 type Node struct {
 	//Entry     *Entry
 	keyOffset   uint32
+	seq         uint64
 	valueOffset uint32
 	next        [kMaxHeight]*Node
 }
@@ -47,21 +50,27 @@ type Value struct {
 func NewNode(arena *Arena, entry *Entry, height int) *Node {
 	keySize := len(entry.Key)
 	valSize := len(entry.Value)
-	//internalKeySize := keySize + 8
-	internalKeySize := keySize
+	internalKeySize := keySize + 8
+	//internalKeySize := keySize
 	encodedLen := codec.VarintLength(uint64(internalKeySize)) +
 		internalKeySize + codec.VarintLength(uint64(valSize)) + valSize
 
 	offset := arena.Allocate(uint32(encodedLen))
 	kw := arena.PutKey(entry.Key, offset)
-	arena.PutVal(entry.Value, offset+kw)
+	//sequence := time.Now().UnixMilli()
+	sequence := atomic.AddUint64(&seq, 1)
+	sw := arena.PutSeq(uint64(sequence), offset+kw)
+	arena.PutVal(entry.Value, offset+sw+kw)
+	//arena.PutVal(entry.Value, offset+kw)
 
 	nodeOffset := arena.putNode(height)
 
 	node := arena.getNode(nodeOffset)
 	//node.key = &Key{keyOffset: offset, keySize: uint32(keySize)}
 	node.keyOffset = offset
-	node.valueOffset = offset + kw
+	node.seq = uint64(sequence)
+	node.valueOffset = offset + sw + kw
+	//node.valueOffset = offset + kw
 	//node.value = &Value{valueOffset: offset + kw, valueSize: uint32(valSize)}
 	//node.next = make([]*Node, height)
 	return node
@@ -84,6 +93,10 @@ func (node *Node) getKey(arena *Arena) []byte {
 func (node *Node) getValue(arena *Arena) []byte {
 	v, _ := arena.getVal(node.valueOffset)
 	return v
+}
+func (node *Node) getSeq(arena *Arena) uint64 {
+	seq := arena.getSeq(node.valueOffset - 8)
+	return seq
 }
 
 func NewSkipList(arena *Arena) *SkipList {
@@ -163,7 +176,8 @@ func (list *SkipList) Add(entry *Entry) error {
 	return nil
 }
 
-func (list *SkipList) Search(key []byte) []byte {
+//func (list *SkipList) Search(key []byte) []byte {
+func (list *SkipList) Search(key []byte) *Entry {
 	list.lock.RLock()
 	defer list.lock.RUnlock()
 	p := list.head
@@ -172,7 +186,11 @@ func (list *SkipList) Search(key []byte) []byte {
 		for next := p.next[i]; next != nil; {
 			if list.KeyIsAfterNode(key, next) {
 				if i == 0 && list.comparator.Compare(key, next.getKey(list.arena)) == 0 {
-					return next.getValue(list.arena)
+					e := &Entry{Key: key}
+					e.Value = next.getValue(list.arena)
+					e.Seq = next.getSeq(list.arena)
+					//e.Seq
+					return e
 				}
 				break
 			} else {
@@ -211,7 +229,8 @@ func (list *SkipList) PrintSkipList() {
 	for i := level; i >= 0; i-- {
 		for next := p.next[i]; next != nil; {
 
-			fmt.Printf("(%s, %s) -> ", next.getKey(list.arena), next.getValue(list.arena))
+			fmt.Printf("(%s, %s, %d) -> ", next.getKey(list.arena), next.getValue(list.arena), next.getSeq(list.arena))
+			//fmt.Printf("(%s, %s, %d) -> ", next.getKey(list.arena), next.getValue(list.arena), next.seq)
 			next = next.next[i]
 		}
 		fmt.Println()

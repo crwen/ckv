@@ -50,9 +50,13 @@ func (mem *MemTable) set(entry *utils.Entry) error {
 func (mem *MemTable) Get(key []byte) (*utils.Entry, error) {
 
 	v := mem.table.Search(key)
+	if v == nil {
+		return nil, nil
+	}
 	e := &utils.Entry{
 		Key:   key,
-		Value: v,
+		Value: v.Value,
+		Seq:   v.Seq,
 	}
 	return e, nil
 }

@@ -1,18 +1,23 @@
 package version
 
 import (
+	"SimpleKV/sstable"
 	"SimpleKV/utils"
 	"SimpleKV/utils/cmp"
-	"fmt"
+	"sort"
 )
 
 type MergeIterator struct {
-	list []utils.Iterator
+	list []sstable.TableIterator
 	it   utils.Item
+	curr sstable.TableIterator
 	cmp  cmp.Comparator
 }
 
-func NewMergeIterator(iters []utils.Iterator, cmp cmp.Comparator) *MergeIterator {
+func NewMergeIterator(iters []sstable.TableIterator, cmp cmp.Comparator) *MergeIterator {
+	sort.Slice(iters, func(i, j int) bool {
+		return iters[i].GetFID()-iters[j].GetFID() > 0
+	})
 	return &MergeIterator{
 		list: iters,
 		cmp:  cmp,
@@ -51,18 +56,21 @@ func merge(iter1 utils.Iterator, iter2 utils.Iterator) utils.Iterator {
 func (iter *MergeIterator) Next() {
 	n := 0
 	var key []byte
+	// find the smallest key
 	for i, it := range iter.list {
-		if it.Valid() && iter.cmp.Compare(it.Item().Entry().Key, key) > 0 {
+		if it.Valid() && iter.cmp.Compare(it.Item().Entry().Key, key) < 0 {
 			n = i
 		}
 	}
-	if iter.list[n].Valid() {
-		iter.it = iter.list[n].Item()
-		iter.list[n].Next()
-	} else {
-		fmt.Println("!valid")
+	iter.curr = iter.list[n]
+	iter.it = iter.curr.Item()
+
+	// skip repeat keys
+	for _, it := range iter.list {
+		for it.Valid() && iter.cmp.Compare(it.Item().Entry().Key, key) == 0 {
+			it.Next()
+		}
 	}
-	//iter.it = iter.list[n].Item()
 }
 
 func (iter *MergeIterator) Valid() bool {

@@ -211,8 +211,12 @@ type TableIterator struct {
 	err       error
 }
 
-func (t *Table) NewIterator(options *utils.Options) utils.Iterator {
-	return &TableIterator{
+func (iter *TableIterator) GetFID() uint64 {
+	return iter.t.fid
+}
+
+func (t *Table) NewIterator(options *utils.Options) TableIterator {
+	return TableIterator{
 		opt:       options,
 		t:         t,
 		blockIter: &BlockIterator{},

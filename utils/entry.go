@@ -50,6 +50,7 @@ func sizeVarint(x uint64) (n int) {
 type Entry struct {
 	Key       []byte
 	Value     []byte
+	Seq       uint64
 	ExpiresAt uint64
 
 	KeySize uint32
