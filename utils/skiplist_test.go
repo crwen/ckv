@@ -7,17 +7,26 @@ import (
 	"github.com/stretchr/testify/require"
 	"sync"
 	"testing"
-	"time"
 )
 
 func TestSkipListAdd(t *testing.T) {
-	fmt.Printf("%d\n", time.Now().UnixMilli())
-	list := NewSkipList(NewArena(1 << 20))
+	//list := NewSkipList(NewArena(1 << 20))
+	list := NewSkipListWithComparator(NewArena(1<<20), cmp.IntComparator{})
 	key, val := "", ""
 	maxTime := 20
 	for i := 0; i < maxTime; i++ {
 		//number := rand.Intn(10000)
 		key, val = fmt.Sprintf("%d", i), fmt.Sprintf("%d", i)
+		entry := NewEntry([]byte(key), []byte(val))
+		res := list.Add(entry)
+		//list.Add(entry)
+		assert.Equal(t, res, nil)
+		searchVal := list.Search([]byte(key))
+		assert.Equal(t, searchVal.Value, []byte(val))
+	}
+	for i := 0; i < maxTime; i++ {
+		//number := rand.Intn(10000)
+		key, val = fmt.Sprintf("%d", i), fmt.Sprintf("%d", i+1)
 		entry := NewEntry([]byte(key), []byte(val))
 		res := list.Add(entry)
 		//list.Add(entry)

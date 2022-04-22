@@ -279,6 +279,22 @@ func (iter *TableIterator) Seek(key []byte) {
 		iter.err = io.EOF
 		return
 	}
+	if idx > 0 && iter.t.Compare(index.BlockOffsets[idx].Key, key) == 0 {
+		// seek prev block first
+		block, err := iter.t.ReadBlock(idx - 1)
+		iter.blockIter.setBlock(block, iter.t.opt.Comparable)
+		iter.blockIter.seekToFirst()
+		iter.blockIter.Seek(key)
+		err = iter.blockIter.Error()
+		if err != nil {
+			//	iter.err = err
+			//	return
+		}
+		if iter.t.Compare(iter.blockIter.it.Entry().Key, key) == 0 {
+			iter.it = iter.blockIter.it
+			return
+		}
+	}
 
 	// search block
 	block, err := iter.t.ReadBlock(idx)

@@ -54,23 +54,36 @@ func merge(iter1 utils.Iterator, iter2 utils.Iterator) utils.Iterator {
 }
 
 func (iter *MergeIterator) Next() {
+	var smallest []byte
+	k := iter.curr.Item().Entry().Key
 	n := 0
-	var key []byte
-	// find the smallest key
-	for i, it := range iter.list {
-		if it.Valid() && iter.cmp.Compare(it.Item().Entry().Key, key) < 0 {
+	for i := 0; i < len(iter.list); i++ {
+		if iter.curr == iter.list[i] {
+			iter.list[i].Next()
+		}
+		for iter.list[i].Valid() && iter.cmp.Compare(iter.list[i].Item().Entry().Key, k) == 0 {
+			iter.list[i].Next()
+		}
+		if iter.list[i].Valid() && smallest == nil {
+			smallest = iter.list[i].Item().Entry().Key
+			n = i
+		} else if iter.list[i].Valid() && iter.cmp.Compare(iter.list[i].Item().Entry().Key, smallest) < 0 {
+			smallest = iter.list[i].Item().Entry().Key
+			n = i
+		}
+	}
+	for i := 0; i < len(iter.list); i++ {
+
+		if iter.list[i].Valid() && smallest == nil {
+			smallest = iter.list[i].Item().Entry().Key
+			n = i
+		} else if iter.list[i].Valid() && iter.cmp.Compare(iter.list[i].Item().Entry().Key, smallest) < 0 {
+			smallest = iter.list[i].Item().Entry().Key
 			n = i
 		}
 	}
 	iter.curr = iter.list[n]
-	iter.it = iter.curr.Item()
-
-	// skip repeat keys
-	for _, it := range iter.list {
-		for it.Valid() && iter.cmp.Compare(it.Item().Entry().Key, key) == 0 {
-			it.Next()
-		}
-	}
+	//iter.list[n].Next()
 }
 
 func (iter *MergeIterator) Valid() bool {
@@ -80,20 +93,25 @@ func (iter *MergeIterator) Valid() bool {
 		}
 	}
 	return false
-	//if iter.Valid() {
-	//	return true
-	//}
-	//return false
 }
 
 func (iter *MergeIterator) Rewind() {
-	for _, it := range iter.list {
+	var key []byte
+	for i, it := range iter.list {
 		it.Rewind()
+		iter.list[i] = it
+		if it.Valid() && key == nil {
+			key = it.Item().Entry().Key
+			iter.curr = it
+		} else if it.Valid() && iter.cmp.Compare(it.Item().Entry().Key, key) < 0 {
+			key = it.Item().Entry().Key
+			iter.curr = it
+		}
 	}
 }
 
 func (iter *MergeIterator) Item() utils.Item {
-	return iter.it
+	return iter.curr.Item()
 }
 
 func (iter *MergeIterator) Close() error {

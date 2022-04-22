@@ -23,6 +23,7 @@ var (
 type SkipList struct {
 	head       *Node
 	maxHeight  int
+	ref        int32
 	rand       *rand.Rand
 	arena      *Arena
 	comparator cmp.Comparator
@@ -37,14 +38,17 @@ type Node struct {
 	next        [kMaxHeight]*Node
 }
 
-type Key struct {
-	keyOffset uint32
-	keySize   uint32
+// IncrRef increase the ref by 1
+func (list *SkipList) IncrRef() {
+	atomic.AddInt32(&list.ref, 1)
 }
 
-type Value struct {
-	valueOffset uint32
-	valueSize   uint32
+// DecrRef decrease the ref by 1. If the ref is 0, close the skip list
+func (list *SkipList) DecrRef() {
+	newRef := atomic.AddInt32(&list.ref, -1)
+	if newRef < 0 {
+		list.Close()
+	}
 }
 
 func NewNode(arena *Arena, entry *Entry, height int) *Node {
@@ -243,6 +247,8 @@ type SkipListIterator struct {
 }
 
 func (list *SkipList) NewIterator() *SkipListIterator {
+	// increase ref first
+	list.IncrRef()
 	return &SkipListIterator{
 		list: list,
 		node: list.head,
@@ -282,7 +288,9 @@ func (iter *SkipListIterator) Item() Item {
 }
 
 func (iter *SkipListIterator) Close() error {
-	iter.list.Close()
+	// decrease the ref of skip list
+	iter.list.DecrRef()
+	//iter.list.Close()
 	return nil
 }
 

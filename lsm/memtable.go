@@ -67,6 +67,7 @@ func (m *MemTable) Size() int64 {
 
 // Close
 func (m *MemTable) close() error {
+	// close wal first
 	if err := m.wal.Close(); err != nil {
 		return err
 	}
