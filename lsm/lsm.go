@@ -12,6 +12,14 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
+	"sync/atomic"
+)
+
+const (
+	IMMUTABLE  = -1
+	NORMAL     = 0
+	COMPACTING = 1
 )
 
 var (
@@ -24,7 +32,11 @@ type LSM struct {
 	option     *utils.Options
 	//lm         *levelManager
 	verSet *version.VersionSet
+	seq    uint64
 	//maxFID uint64
+	lock                  *sync.RWMutex
+	cond                  *sync.Cond
+	bgCompactionScheduled bool
 }
 
 // NewLSM _
@@ -34,7 +46,8 @@ func NewLSM(opt *utils.Options) *LSM {
 	} else {
 		opt.Comparable = cmp.ByteComparator{}
 	}
-	lsm := &LSM{option: opt}
+	lsm := &LSM{option: opt, lock: &sync.RWMutex{}}
+	lsm.cond = sync.NewCond(lsm.lock)
 	lsm.verSet, _ = version.Open(lsm.option)
 	//lsm.lm = lsm.newLevelManager()
 	// recovery
@@ -59,19 +72,19 @@ func (lsm *LSM) Set(entry *utils.Entry) (err error) {
 	if lsm.memTable.Size() > lsm.option.MemTableSize {
 		lsm.Rotate()
 	}
+	sequence := atomic.AddUint64(&lsm.seq, 1)
+	entry.Seq = sequence
 	if err = lsm.memTable.set(entry); err != nil {
 		return err
 	}
 
-	// TODO
-	// check immutables
-	for _, immutable := range lsm.immutables {
-		lsm.WriteLevel0Table(immutable)
-		immutable.close()
-	}
-	if len(lsm.immutables) != 0 {
-		lsm.immutables = make([]*MemTable, 0)
-	}
+	//for _, imm := range lsm.immutables {
+	//	//if imm.state != -1 {
+	//	lsm.WriteLevel0Table(imm)
+	//	//}
+	//}
+	//lsm.immutables = lsm.immutables[:0]
+
 	return err
 }
 
@@ -102,14 +115,18 @@ func (lsm *LSM) Get(key []byte) (*utils.Entry, error) {
 
 // WriteLevel0Table write immutable to sst file
 func (lsm *LSM) WriteLevel0Table(immutable *MemTable) (err error) {
+	//if !atomic.CompareAndSwapInt32(&immutable.state, IMMUTABLE, COMPACTING) {
+	//	return nil
+	//}
 	// 分配一个fid
 	//fid := mem.wal.Fid()
 	fid := immutable.wal.Fid()
 	sstName := file.FileNameSSTable(lsm.option.WorkDir, fid)
-
+	//fmt.Println(fid)
 	// 构建一个 builder
 	builder := sstable.NewTableBuiler(lsm.option)
-	iter := immutable.table.NewIterator()
+	//iter := immutable.table.NewIterator()
+	iter := immutable.NewMemTableIterator()
 	var entry *utils.Entry
 	for iter.Rewind(); iter.Valid(); iter.Next() {
 		entry = iter.Item().Entry()
@@ -132,14 +149,43 @@ func (lsm *LSM) WriteLevel0Table(immutable *MemTable) (err error) {
 
 	lsm.verSet.Add(level, t)
 	//lsm.lm.levels[0].add(t)
+	//immutable.state = -1
+	immutable.DecrRef()
 
 	return
 }
 
 // Rotate append MemTable to immutable, and create a new MemTable
 func (lsm *LSM) Rotate() {
-	lsm.immutables = append(lsm.immutables, lsm.memTable)
-	lsm.memTable = lsm.NewMemTable()
+	//if !atomic.CompareAndSwapInt32(&lsm.memTable.state, NORMAL, IMMUTABLE) {
+	//	return
+	//}
+	//if len(lsm.immutables) > 0 {
+	//	lsm.lock.Lock()
+	//	for len(lsm.immutables) != 0 {
+	//		lsm.cond.Wait()
+	//	}
+	//} else {
+	//	lsm.immutables = append(lsm.immutables, lsm.memTable)
+	//	lsm.memTable = lsm.NewMemTable()
+	//	lsm.backgroundCall()
+	//}
+
+	lsm.lock.Lock()
+	defer lsm.lock.Unlock()
+
+	for true {
+		if lsm.memTable.Size() <= lsm.option.MemTableSize {
+			break
+		} else if len(lsm.immutables) != 0 {
+			lsm.cond.Wait()
+		} else {
+			lsm.immutables = append(lsm.immutables, lsm.memTable)
+			lsm.memTable = lsm.NewMemTable()
+			lsm.maybeScheduleCompaction()
+		}
+	}
+
 }
 
 func (lsm *LSM) recovery() (*MemTable, []*MemTable) {
@@ -180,7 +226,11 @@ func (lsm *LSM) recovery() (*MemTable, []*MemTable) {
 		imms = append(imms, mt)
 	}
 	lsm.verSet.NextFileNumber = maxFID
-	return lsm.NewMemTable(), imms
+	for _, imm := range imms {
+		lsm.WriteLevel0Table(imm)
+	}
+	lsm.immutables = lsm.immutables[:0]
+	return lsm.NewMemTable(), imms[:0]
 }
 
 func (lsm *LSM) openMemTable(fid uint64) (*MemTable, error) {
@@ -204,4 +254,42 @@ func (lsm *LSM) openMemTable(fid uint64) (*MemTable, error) {
 
 func Compare(a, b []byte) int {
 	return comparator.Compare(a, b)
+}
+
+func (lsm *LSM) maybeScheduleCompaction() {
+	if lsm.bgCompactionScheduled {
+		return
+	}
+	lsm.bgCompactionScheduled = true
+	go lsm.backgroundCall()
+
+}
+
+func (lsm *LSM) backgroundCall() {
+	lsm.lock.Lock()
+	defer lsm.lock.Unlock()
+	lsm.backgroundCompaction()
+	lsm.bgCompactionScheduled = false
+	lsm.cond.Broadcast()
+}
+
+func (lsm *LSM) backgroundCompaction() {
+	imms := lsm.immutables
+	lsm.lock.Unlock()
+	for _, imm := range imms {
+		lsm.WriteLevel0Table(imm)
+	}
+	lsm.immutables = lsm.immutables[:0]
+
+	lsm.lock.Lock()
+}
+
+func (lsm *LSM) compactMem() {
+
+	for _, imm := range lsm.immutables {
+		lsm.WriteLevel0Table(imm)
+	}
+	lsm.immutables = lsm.immutables[:0]
+	lsm.bgCompactionScheduled = false
+	lsm.cond.Broadcast()
 }

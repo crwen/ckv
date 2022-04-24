@@ -219,6 +219,9 @@ func (v *Version) overlapInLevel(level int, smallest, largest []byte) bool {
 
 func (v *Version) findFile(files []*FileMetaData, key []byte) int {
 	cmp := v.opt.Comparable
+	sort.Slice(files, func(i, j int) bool {
+		return cmp.Compare(files[i].smallest, files[j].smallest) < 0
+	})
 	if len(files) == 0 {
 		return 0
 	}

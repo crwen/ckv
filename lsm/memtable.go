@@ -6,13 +6,15 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sync/atomic"
 )
 
 type MemTable struct {
 	table *utils.SkipList
 	arena *utils.Arena
-
-	wal *WalFile
+	wal   *WalFile
+	ref   int32
+	state int32
 }
 
 // NewMemtable _
@@ -28,11 +30,14 @@ func (lsm *LSM) NewMemTable() *MemTable {
 		Flag:     os.O_CREATE | os.O_RDWR,
 		MaxSz:    int(lsm.option.MemTableSize),
 	}
-	return &MemTable{
+	m := &MemTable{
 		table: utils.NewSkipListWithComparator(arena, lsm.option.Comparable),
 		wal:   OpenWalFile(fileOpt),
 		arena: arena,
+		state: NORMAL,
 	}
+	m.IncrRef()
+	return m
 }
 
 func (mem *MemTable) set(entry *utils.Entry) error {
@@ -83,4 +88,53 @@ func (m *MemTable) recoveryMemTable(opt *utils.Options) func(*utils.Entry) error
 	return func(e *utils.Entry) error {
 		return m.table.Add(e)
 	}
+}
+
+// IncrRef increase the ref by 1
+func (m *MemTable) IncrRef() {
+	atomic.AddInt32(&m.ref, 1)
+}
+
+// DecrRef decrease the ref by 1. If the ref is 0, close the skip list
+func (m *MemTable) DecrRef() {
+	newRef := atomic.AddInt32(&m.ref, -1)
+	if newRef <= 0 {
+		m.close()
+	}
+}
+
+type MemTableIterator struct {
+	list *utils.SkipListIterator
+	mem  *MemTable
+}
+
+func (m *MemTable) NewMemTableIterator() *MemTableIterator {
+	//m.IncrRef()
+	return &MemTableIterator{list: m.table.NewIterator(), mem: m}
+}
+
+func (m MemTableIterator) Next() {
+	m.list.Next()
+}
+
+func (m MemTableIterator) Valid() bool {
+	return m.list.Valid()
+}
+
+func (m MemTableIterator) Rewind() {
+	m.list.Rewind()
+}
+
+func (m MemTableIterator) Item() utils.Item {
+	return m.list.Item()
+}
+
+func (m MemTableIterator) Close() error {
+	//m.list.Close()
+	//m.mem.DecrRef()
+	return nil
+}
+
+func (m MemTableIterator) Seek(key []byte) {
+	m.list.Seek(key)
 }

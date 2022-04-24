@@ -46,8 +46,8 @@ func (list *SkipList) IncrRef() {
 // DecrRef decrease the ref by 1. If the ref is 0, close the skip list
 func (list *SkipList) DecrRef() {
 	newRef := atomic.AddInt32(&list.ref, -1)
-	if newRef < 0 {
-		list.Close()
+	if newRef <= 0 {
+		list.arena = nil
 	}
 }
 
@@ -62,8 +62,8 @@ func NewNode(arena *Arena, entry *Entry, height int) *Node {
 	offset := arena.Allocate(uint32(encodedLen))
 	kw := arena.PutKey(entry.Key, offset)
 	//sequence := time.Now().UnixMilli()
-	sequence := atomic.AddUint64(&seq, 1)
-	sw := arena.PutSeq(uint64(sequence), offset+kw)
+	//sequence := atomic.AddUint64(&seq, 1)
+	sw := arena.PutSeq(uint64(entry.Seq), offset+kw)
 	arena.PutVal(entry.Value, offset+sw+kw)
 	//arena.PutVal(entry.Value, offset+kw)
 
@@ -72,7 +72,7 @@ func NewNode(arena *Arena, entry *Entry, height int) *Node {
 	node := arena.getNode(nodeOffset)
 	//node.key = &Key{keyOffset: offset, keySize: uint32(keySize)}
 	node.keyOffset = offset
-	node.seq = uint64(sequence)
+	node.seq = uint64(entry.Seq)
 	node.valueOffset = offset + sw + kw
 	//node.valueOffset = offset + kw
 	//node.value = &Value{valueOffset: offset + kw, valueSize: uint32(valSize)}
@@ -128,7 +128,8 @@ func NewSkipListWithComparator(arena *Arena, comparator cmp.Comparator) *SkipLis
 }
 
 func (list *SkipList) Close() {
-	list.arena = nil
+	//list.arena = nil
+	list.DecrRef()
 }
 
 func (list *SkipList) FindGreaterOrEqual(key []byte, prev []*Node) *Node {
@@ -248,7 +249,7 @@ type SkipListIterator struct {
 
 func (list *SkipList) NewIterator() *SkipListIterator {
 	// increase ref first
-	list.IncrRef()
+	//list.IncrRef()
 	return &SkipListIterator{
 		list: list,
 		node: list.head,
@@ -289,7 +290,7 @@ func (iter *SkipListIterator) Item() Item {
 
 func (iter *SkipListIterator) Close() error {
 	// decrease the ref of skip list
-	iter.list.DecrRef()
+	//iter.list.DecrRef()
 	//iter.list.Close()
 	return nil
 }
