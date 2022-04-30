@@ -165,7 +165,7 @@ func TestLWAL_Read(t *testing.T) {
 		if err != nil {
 			panic(err)
 		}
-		fmt.Println(string(v.Key), string(v.Value))
+		fmt.Println(string(v.Key), string(v.Value), v.Seq)
 		assert.Equal(t, e.Value, v.Value)
 	}
 

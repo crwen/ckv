@@ -24,7 +24,7 @@ type Block struct {
 	EstimateSz   int64
 }
 
-func (b *Block) readEntry(buf []byte, sz uint32) (key, value []byte) {
+func (b *Block) readEntry(buf []byte, sz uint32) (key, value []byte, seq uint64) {
 	entryData := buf[:4] // header
 	h := &Header{}
 	h.decode(entryData)
@@ -41,8 +41,9 @@ func (b *Block) readEntry(buf []byte, sz uint32) (key, value []byte) {
 		copy(k[overlap:], diffKey)
 		key = k
 	}
-	value = buf[4+diff : sz]
-	return key, value
+	seq = convert.BytesToU64(buf[4+diff : 12+diff])
+	value = buf[12+diff : sz]
+	return key, value, seq
 }
 
 // ReadEntryOffsets return the start Offset of first entry offsets
@@ -122,18 +123,20 @@ func (iter *BlockIterator) setIdx(idx int) {
 		iter.err = io.EOF
 		return
 	}
+	var seq uint64
 	if iter.idx == len(iter.block.EntryOffsets)-1 {
-		iter.key, iter.val = iter.block.readEntry(
+		iter.key, iter.val, seq = iter.block.readEntry(
 			iter.block.Data[iter.block.EntryOffsets[iter.idx]:],
 			uint32(iter.block.entriesIndexStart)-iter.block.EntryOffsets[iter.idx])
 	} else {
-		iter.key, iter.val = iter.block.readEntry(
+		iter.key, iter.val, seq = iter.block.readEntry(
 			iter.block.Data[iter.block.EntryOffsets[iter.idx]:],
 			iter.block.EntryOffsets[iter.idx+1]-iter.block.EntryOffsets[iter.idx])
 	}
 	e := &utils.Entry{
 		Key:   iter.key,
 		Value: iter.val,
+		Seq:   seq,
 	}
 	iter.it = e
 }

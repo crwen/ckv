@@ -285,6 +285,7 @@ func (iter *SkipListIterator) Item() Item {
 	return &Entry{
 		Key:   iter.node.getKey(iter.list.arena),
 		Value: iter.node.getValue(iter.list.arena),
+		Seq:   iter.node.getSeq(iter.list.arena),
 	}
 }
 

@@ -55,7 +55,7 @@ func (wal *WalFile) Write(entry *utils.Entry) error {
 	h.keyLen = uint16(len(entry.Key))
 	h.ValueLen = uint16(len(entry.Key))
 	// checksum + key len + value len + type = 4 + 2 + 2 + 1 = 9
-	total := h.keyLen + h.ValueLen + 9
+	total := h.keyLen + h.ValueLen + 9 + 8
 
 	buf := make([]byte, total)
 	// write key len , write len and type
@@ -66,8 +66,8 @@ func (wal *WalFile) Write(entry *utils.Entry) error {
 	// write key value
 	copy(buf[9:9+len(entry.Key)], entry.Key)
 	pos := 9 + len(entry.Key)
-	copy(buf[pos:], entry.Value) // write value
-
+	copy(buf[pos:pos+8], convert.U64ToBytes(entry.Seq))
+	copy(buf[pos+8:], entry.Value) // write value
 	h.checksum = codec.CalculateU32Checksum(buf[4:])
 	copy(buf[:4], convert.U32ToBytes(h.checksum)) // write checksum
 
@@ -100,7 +100,7 @@ func (wal *WalFile) Iterate(fn func(e *utils.Entry) error) (uint32, error) {
 		h.keyLen = convert.BytesToU16(buf[4:6])
 		h.ValueLen = convert.BytesToU16(buf[6:8])
 		h.types = buf[8]
-		b := make([]byte, h.keyLen+h.ValueLen)
+		b := make([]byte, h.keyLen+h.ValueLen+8)
 
 		//io.ReadFull(reader, buf)
 		if _, err := io.ReadFull(reader, b); err != nil {
@@ -108,11 +108,13 @@ func (wal *WalFile) Iterate(fn func(e *utils.Entry) error) (uint32, error) {
 		}
 		//total := 9 + h.keyLen + h.ValueLen
 		//key := data[9 : 9+h.keyLen]
+
 		key := b[:h.keyLen]
+		seq := convert.BytesToU64(b[h.keyLen : h.keyLen+8])
 		//value := data[9+h.keyLen : total]
-		value := b[h.keyLen : h.keyLen+h.ValueLen]
+		value := b[h.keyLen+8 : h.keyLen+8+h.ValueLen]
 		//data = data[total:]
-		err := fn(&utils.Entry{Key: key, Value: value})
+		err := fn(&utils.Entry{Key: key, Value: value, Seq: seq})
 		buf = append(buf, b...)
 		if err := codec.VerifyU32Checksum(buf[4:], h.checksum); err != nil {
 			break

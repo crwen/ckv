@@ -51,6 +51,7 @@ func newTableBuilerWithSSTSize(opt *utils.Options, size int64) *tableBuilder {
 func (tb *tableBuilder) Add(e *utils.Entry, isStale bool) {
 	key := e.Key
 	val := e.Value
+	seq := e.Seq
 	// 检查是否需要分配一个新的 Block
 	if tb.tryFinishBlock(e) {
 		if isStale {
@@ -86,7 +87,7 @@ func (tb *tableBuilder) Add(e *utils.Entry, isStale bool) {
 
 	tb.append(h.encode())
 	tb.append(differKey)
-
+	tb.append(convert.U64ToBytes(seq))
 	dst := tb.allocate(len(val))
 	copy(dst, val)
 }
