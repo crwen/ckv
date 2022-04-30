@@ -150,7 +150,6 @@ func (lsm *LSM) WriteLevel0Table(immutable *MemTable) (err error) {
 	lsm.verSet.Add(level, t)
 	//lsm.lm.levels[0].add(t)
 	//immutable.state = -1
-	immutable.DecrRef()
 
 	return
 }
@@ -248,7 +247,11 @@ func (lsm *LSM) openMemTable(fid uint64) (*MemTable, error) {
 		arena: arena,
 	}
 	mt.wal = OpenWalFile(fileOpt)
-	mt.wal.Iterate(mt.recoveryMemTable(lsm.option))
+	//oldSeq := lsm.seq
+	seq, _ := mt.wal.Iterate(mt.recoveryMemTable(lsm.option))
+	//atomic.CompareAndSwapUint64(&lsm.seq, oldSeq, seq)
+	//atomic.AddUint64(&lsm.seq, seq - lsm.seq)
+	lsm.seq = seq
 	return mt, nil
 }
 
@@ -278,6 +281,7 @@ func (lsm *LSM) backgroundCompaction() {
 	lsm.lock.Unlock()
 	for _, imm := range imms {
 		lsm.WriteLevel0Table(imm)
+		imm.DecrRef()
 	}
 	lsm.immutables = lsm.immutables[:0]
 

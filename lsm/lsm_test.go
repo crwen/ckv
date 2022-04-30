@@ -148,11 +148,11 @@ func TestLWAL_Read(t *testing.T) {
 	//clearDir()
 	//TestWAL(t)
 	lsm := NewLSM(opt)
-	e := &utils.Entry{
+	ee := &utils.Entry{
 		Key:   []byte(fmt.Sprintf("%d", 1111)),
 		Value: []byte(fmt.Sprintf("%d", 1111)),
 	}
-	lsm.Set(e)
+	lsm.Set(ee)
 
 	for i := 0; i < 5000; i++ {
 		e := &utils.Entry{
@@ -168,6 +168,11 @@ func TestLWAL_Read(t *testing.T) {
 		fmt.Println(string(v.Key), string(v.Value), v.Seq)
 		assert.Equal(t, e.Value, v.Value)
 	}
+	v, err := lsm.Get(ee.Key)
+	if err != nil {
+		panic(err)
+	}
+	fmt.Println(string(v.Key), string(v.Value), v.Seq)
 
 }
 

@@ -80,7 +80,7 @@ func (wal *WalFile) Write(entry *utils.Entry) error {
 	return nil
 }
 
-func (wal *WalFile) Iterate(fn func(e *utils.Entry) error) (uint32, error) {
+func (wal *WalFile) Iterate(fn func(e *utils.Entry) error) (uint64, error) {
 	wal.lock.Lock()
 	defer wal.lock.Unlock()
 	reader := bufio.NewReader(wal.f.NewReader(int(0)))
@@ -90,6 +90,7 @@ func (wal *WalFile) Iterate(fn func(e *utils.Entry) error) (uint32, error) {
 	//if err != nil {
 	//	errs.Panic(err)
 	//}
+	var maxSeq uint64
 	for {
 		buf := make([]byte, 9)
 		if _, err := io.ReadFull(reader, buf); err != nil {
@@ -122,9 +123,11 @@ func (wal *WalFile) Iterate(fn func(e *utils.Entry) error) (uint32, error) {
 		if err != nil {
 			break
 		}
+		maxSeq = seq
 		//fmt.Println(string(key), string(value))
 	}
-	return 1, nil
+
+	return maxSeq, nil
 }
 
 func (wal *WalFile) Fid() uint64 {

@@ -72,13 +72,19 @@ func (iter *MergeIterator) Next() {
 			n = i
 		}
 	}
+	var seq uint64
 	for i := 0; i < len(iter.list); i++ {
 
 		if iter.list[i].Valid() && smallest == nil {
 			smallest = iter.list[i].Item().Entry().Key
+			seq = iter.list[i].Item().Entry().Seq
 			n = i
-		} else if iter.list[i].Valid() && iter.cmp.Compare(iter.list[i].Item().Entry().Key, smallest) < 0 {
+		} else if iter.list[i].Valid() && iter.cmp.Compare(iter.list[i].Item().Entry().Key, smallest) <= 0 {
+			if iter.list[i].Item().Entry().Seq <= seq {
+				continue
+			}
 			smallest = iter.list[i].Item().Entry().Key
+			seq = iter.list[i].Item().Entry().Seq
 			n = i
 		}
 	}
