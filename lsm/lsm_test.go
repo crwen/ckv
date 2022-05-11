@@ -181,9 +181,7 @@ func TestCompactiont(t *testing.T) {
 	comparable := cmp.IntComparator{}
 	opt.Comparable = comparable
 	lsm := NewLSM(opt)
-	for i := 0; i < 5; i++ {
-		go lsm.verSet.RunCompact()
-	}
+	//go lsm.verSet.RunCompact()
 
 	for i := 0; i < 10000; i++ {
 		e := &utils.Entry{

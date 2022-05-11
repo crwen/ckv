@@ -5,7 +5,6 @@ import (
 	"SimpleKV/sstable"
 	"SimpleKV/utils"
 	"SimpleKV/utils/errs"
-	"fmt"
 	"log"
 	"math/rand"
 	"sort"
@@ -121,6 +120,12 @@ func (vs *VersionSet) compact(id int) {
 func (vs *VersionSet) pickCompaction() *Compaction {
 	var c Compaction
 	c.baseLevel = vs.current.pickCompactionLevel()
+	// compact itself for max level
+	if c.baseLevel == vs.current.opt.MaxLevelNum {
+		c.base = make([]*FileMetaData, 0)
+		c.target = append(c.target, vs.current.files[c.baseLevel]...)
+		return &c
+	}
 	c.base = append(c.base, vs.current.files[c.baseLevel]...)
 	// TODO compact to more higher level
 	c.targetLevel = c.baseLevel + 1
@@ -140,18 +145,24 @@ func (vs *VersionSet) pickCompaction() *Compaction {
 		}
 	} else {
 		cmp := vs.current.opt.Comparable
+		// sort by smallest key
 		sort.Slice(vs.current.files[c.baseLevel], func(i, j int) bool {
 			return cmp.Compare(vs.current.files[c.baseLevel][i].smallest,
 				vs.current.files[c.baseLevel][j].smallest) < 0
 		})
 		smallest = vs.current.files[c.baseLevel][0].smallest
 		largest = vs.current.files[c.baseLevel][0].largest
-		//for i := 0; i < len(vs.current.files[c.baseLevel]); i++ {
-		//f := vs.current.files[prior.baseLevel][i]
-		//if vs.current {
-		//
-		//}
-		//}
+		c.base = append(c.base, vs.current.files[c.baseLevel][0])
+
+		// append sst that overlap
+		for i := 0; i < len(vs.current.files[c.baseLevel]); i++ {
+			f := vs.current.files[c.baseLevel][i]
+			// if there are overlap key, append to base
+			if cmp.Compare(f.smallest, largest) >= 0 {
+				c.base = append(c.base, f)
+				largest = f.largest
+			}
+		}
 	}
 
 	for i := 0; i < len(vs.current.files[c.targetLevel]); i++ {
@@ -163,7 +174,7 @@ func (vs *VersionSet) pickCompaction() *Compaction {
 			c.target = append(c.target, f)
 		}
 	}
-	fmt.Printf("base: %v\n target: %v\n", c.base, c.target)
+	log.Printf("base: %v\n target: %v\n", c.base, c.target)
 	return &c
 }
 

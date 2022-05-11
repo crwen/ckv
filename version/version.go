@@ -103,7 +103,9 @@ func (v *Version) pickCompactionLevel() int {
 			baseLevel = i
 		}
 	}
-
+	if bestScore < 1 {
+		return v.opt.MaxLevelNum
+	}
 	return baseLevel
 }
 
