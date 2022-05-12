@@ -10,6 +10,7 @@ type Cache struct {
 	//index Replacer
 	index     map[uint64]*sstable.IndexBlock
 	table     Replacer
+	block     Replacer
 	indexLock sync.RWMutex
 	tableLock sync.RWMutex
 }
@@ -18,8 +19,26 @@ func NewCache(nblock, nindex int) *Cache {
 	return &Cache{
 		//index: NewLRUReplacer(nindex),
 		index: make(map[uint64]*sstable.IndexBlock),
-		table: NewLRUReplacer(100),
+		//table: NewLRUReplacer(100),
+		table: NewWinTinyLFU(nblock),
+		block: NewWinTinyLFU(nblock),
 	}
+}
+
+func (cache Cache) AddBlock(fid uint64, b *sstable.Block) {
+	cache.tableLock.Lock()
+	defer cache.tableLock.Unlock()
+	cache.table.Put(fmt.Sprintf("%d", fid), b)
+}
+
+func (cache Cache) GetBlock(fid uint64) *sstable.Block {
+	cache.tableLock.RLock()
+	defer cache.tableLock.RUnlock()
+	t := cache.table.Get(fmt.Sprintf("%d", fid))
+	if t == nil {
+		return nil
+	}
+	return t.(*sstable.Block)
 }
 
 func (cache Cache) AddTable(fid uint64, t *sstable.Table) {

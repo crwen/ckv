@@ -3,6 +3,7 @@ module SimpleKV
 go 1.17
 
 require (
+	github.com/dgryski/go-metro v0.0.0-20211217172704-adc40b04c140
 	github.com/golang/protobuf v1.5.0
 	github.com/pkg/errors v0.9.1
 	github.com/stretchr/testify v1.7.0

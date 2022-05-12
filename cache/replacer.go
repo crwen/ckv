@@ -1,20 +1,8 @@
 package cache
 
-import (
-	"sync"
-)
-
 type Replacer interface {
 	Get(key string) interface{}
 	Put(key string, value interface{})
-}
-
-type LRU struct {
-	sync.RWMutex
-	m        map[string]*Node
-	head     *Node
-	tail     *Node
-	capacity int
 }
 
 type Node struct {
@@ -24,52 +12,29 @@ type Node struct {
 	prev  *Node
 }
 
-func NewLRUReplacer(capacity int) Replacer {
+type List struct {
+	head *Node
+	tail *Node
+	sz   int
+}
+
+func newList() *List {
 	head := &Node{}
 	tail := &Node{}
 	head.next = tail
 	tail.prev = head
-	return &LRU{
-		m:        make(map[string]*Node),
-		head:     head,
-		tail:     tail,
-		capacity: capacity,
+	return &List{
+		head: head,
+		tail: tail,
 	}
 }
 
-func (lru *LRU) Get(key string) interface{} {
-	lru.RLock()
-	defer lru.RUnlock()
-	if node, ok := lru.m[key]; ok {
-		lru.remove(node)
-		lru.put2Head(node)
-		return node.value
-	}
-	return nil
+func (list *List) RemoveLast() *Node {
+	return list.Remove(list.tail.prev)
 }
 
-func (lru *LRU) Put(key string, value interface{}) {
-	lru.Lock()
-	defer lru.Unlock()
-	if node, ok := lru.m[key]; ok {
-		lru.remove(node)
-		node.value = value
-		lru.put2Head(node)
-		return
-	}
-	if len(lru.m) == lru.capacity {
-		removed := lru.remove(lru.tail.prev)
-		delete(lru.m, removed.key)
-	}
-	newNode := &Node{
-		key:   key,
-		value: value,
-	}
-	lru.put2Head(newNode)
-	lru.m[key] = newNode
-}
-
-func (lru *LRU) remove(node *Node) *Node {
+func (list *List) Remove(node *Node) *Node {
+	list.sz--
 	prev := node.prev
 	next := node.next
 	prev.next = next
@@ -79,10 +44,45 @@ func (lru *LRU) remove(node *Node) *Node {
 	return node
 }
 
-func (lru *LRU) put2Head(node *Node) {
-	next := lru.head.next
+func (list *List) Put2Head(node *Node) {
+	list.sz++
+	next := list.head.next
 	node.next = next
 	next.prev = node
-	node.prev = lru.head
-	lru.head.next = node
+	node.prev = list.head
+	list.head.next = node
+}
+
+func (list *List) move2Head(node *Node) {
+	list.Remove(node)
+	list.Put2Head(node)
+}
+
+func (list *List) InsertAfter(node *Node, insert *Node) {
+	list.sz++
+	next := node.next
+	node.next = insert
+	insert.next = next
+	next.prev = insert
+	insert.prev = node
+}
+
+func (list *List) InsertLast(node *Node) {
+	list.sz++
+	prev := list.tail.prev
+	prev.next = node
+	node.prev = prev
+	node.next = list.tail
+	list.tail.prev = node
+}
+
+func (list *List) Len() int {
+	return list.sz
+}
+
+func (list *List) Back() *Node {
+	if list.tail.prev == list.head {
+		return nil
+	}
+	return list.tail.prev
 }

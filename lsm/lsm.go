@@ -53,7 +53,7 @@ func NewLSM(opt *utils.Options) *LSM {
 	// recovery
 	lsm.memTable, lsm.immutables = lsm.recovery()
 	//lsm.memTable = lsm.NewMemTable()
-	lsm.verSet.RunCompact()
+	go lsm.verSet.RunCompact()
 	return lsm
 }
 
