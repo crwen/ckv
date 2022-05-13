@@ -91,20 +91,25 @@ func (v *Version) pickCompactionLevel() int {
 	baseLevel := 0
 	var score float64
 	var bestScore float64
+	var maxLevelScore float64
 	for i := 0; i < v.opt.MaxLevelNum; i++ {
 		if i == 0 {
 			score = float64(len(v.files[0])) / float64(L0_CompactionTrigger)
 		} else {
 			score = float64(totalFileSize(v.files[i])) / maxBytesForLevel(i)
 		}
-
+		maxLevelScore = score
 		if score > bestScore {
 			bestScore = score
 			baseLevel = i
 		}
 	}
-	if bestScore < 1 {
-		return v.opt.MaxLevelNum
+	if bestScore < 0.5 {
+		if maxLevelScore > 0.6 {
+			return v.opt.MaxLevelNum - 1
+		} else if len(v.files[0]) > L0_CompactionTrigger/2 {
+			return 0
+		}
 	}
 	return baseLevel
 }

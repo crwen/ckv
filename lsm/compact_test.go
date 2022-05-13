@@ -61,4 +61,5 @@ func TestMerge(t *testing.T) {
 		entry = iter.Item().Entry()
 		fmt.Println(string(entry.Key), string(entry.Value), entry.Seq)
 	}
+	iter.Close()
 }

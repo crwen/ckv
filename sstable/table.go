@@ -10,10 +10,12 @@ import (
 	"github.com/pkg/errors"
 	"io"
 	"os"
+	"sync"
 )
 
 // sst 的内存形式
 type Table struct {
+	sync.RWMutex
 	ss *SSTable
 	//lm     *levelManager
 	fid    uint64
@@ -42,10 +44,14 @@ func OpenTable(opt *utils.Options, fid uint64) *Table {
 	return t
 }
 func (t *Table) Delete() error {
+	t.Lock()
+	defer t.Unlock()
 	return t.ss.Detele()
 }
 
 func (t *Table) Serach(key []byte) (entry *utils.Entry, err error) {
+	t.RLock()
+	defer t.RUnlock()
 	iter := t.NewIterator(t.opt)
 	//iter.seekToFirst()
 	iter.Seek(key)
@@ -54,10 +60,13 @@ func (t *Table) Serach(key []byte) (entry *utils.Entry, err error) {
 	//	return nil, err
 	//}
 	if !iter.Valid() {
+		iter.Close()
 		return nil, errs.ErrKeyNotFound
 	}
 	if t.Compare(iter.Item().Entry().Key, key) == 0 {
-		return iter.Item().Entry(), nil
+		e := iter.Item().Entry()
+		iter.Close()
+		return e, nil
 	}
 
 	//index := t.ss.Indexs()
@@ -216,6 +225,7 @@ func (iter *TableIterator) GetFID() uint64 {
 }
 
 func (t *Table) NewIterator(options *utils.Options) TableIterator {
+	t.RLock()
 	return TableIterator{
 		opt:       options,
 		t:         t,
@@ -263,6 +273,7 @@ func (iter *TableIterator) Item() utils.Item {
 }
 
 func (iter *TableIterator) Close() error {
+	iter.t.RUnlock()
 	iter.blockIter.Close()
 	return nil
 }

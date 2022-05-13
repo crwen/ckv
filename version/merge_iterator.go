@@ -144,5 +144,6 @@ func (iter *MergeIterator) seekToFirst() {
 		}
 	}
 	iter.it = iter.list[n].Item()
+	iter.curr = iter.list[n]
 	iter.list[n].Next()
 }

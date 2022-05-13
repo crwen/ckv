@@ -50,7 +50,7 @@ func (vs *VersionSet) compact(id int) {
 	vs.lock.Lock()
 	vs.lock.Unlock()
 	c := vs.pickCompaction()
-	if c == nil {
+	if c == nil || len(c.base)+len(c.target) <= 1 {
 		return
 	}
 	log.Println("Compact begin")
@@ -74,6 +74,7 @@ func (vs *VersionSet) compact(id int) {
 		entry = iter.Item().Entry()
 		builer.Add(entry, false)
 	}
+	iter.Close()
 
 	vs.Increase(1)
 	sstName := file.FileNameSSTable(vs.current.opt.WorkDir, vs.NextFileNumber)
@@ -95,7 +96,7 @@ func (vs *VersionSet) compact(id int) {
 	for _, meta := range c.target {
 		id := meta.id
 		t := vs.FindTable(id)
-		ve.DeleteFile(c.baseLevel, t)
+		ve.DeleteFile(c.targetLevel, t)
 	}
 	vs.LogAndApply(ve)
 	vs.Add(c.targetLevel, t)
@@ -121,9 +122,10 @@ func (vs *VersionSet) pickCompaction() *Compaction {
 	var c Compaction
 	c.baseLevel = vs.current.pickCompactionLevel()
 	// compact itself for max level
-	if c.baseLevel == vs.current.opt.MaxLevelNum {
+	if c.baseLevel == vs.current.opt.MaxLevelNum-1 {
 		c.base = make([]*FileMetaData, 0)
 		c.target = append(c.target, vs.current.files[c.baseLevel]...)
+		c.targetLevel = c.baseLevel
 		return &c
 	}
 	c.base = append(c.base, vs.current.files[c.baseLevel]...)

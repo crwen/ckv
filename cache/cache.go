@@ -8,6 +8,7 @@ import (
 
 type Cache struct {
 	//index Replacer
+	//index sync.Map
 	index     map[uint64]*sstable.IndexBlock
 	table     Replacer
 	block     Replacer
@@ -61,12 +62,14 @@ func (cache Cache) AddIndex(fid uint64, index *sstable.IndexBlock) {
 	//cache.index.Put(fmt.Sprintf("%d", fid), b)
 	cache.indexLock.Lock()
 	defer cache.indexLock.Unlock()
+	//cache.index.Store(fid, index)
 	cache.index[fid] = index
 }
 
 func (cache Cache) GetIndex(fid uint64) *sstable.IndexBlock {
 	cache.indexLock.RLock()
-	cache.indexLock.RUnlock()
+	defer cache.indexLock.RUnlock()
+
 	index, ok := cache.index[fid]
 	if ok {
 		return index
