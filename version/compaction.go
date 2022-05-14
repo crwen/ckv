@@ -8,12 +8,36 @@ import (
 	"log"
 	"math/rand"
 	"sort"
+	"sync"
 	"time"
 )
 
 const (
 	kMaxMemCompactLevel = 2
 )
+
+type CompactStatus struct {
+	sync.RWMutex
+	levels []*levelCompactStatus
+	tables map[uint64]struct{}
+}
+
+type levelCompactStatus struct {
+	smallest []byte
+	largest  []byte
+	delSize  int64
+}
+
+func NewCompactStatus(option *utils.Options) *CompactStatus {
+	cs := &CompactStatus{
+		levels: make([]*levelCompactStatus, 0),
+		tables: make(map[uint64]struct{}),
+	}
+	for i := 0; i < option.MaxLevelNum; i++ {
+		cs.levels = append(cs.levels, &levelCompactStatus{})
+	}
+	return cs
+}
 
 type Compaction struct {
 	baseLevel   int
@@ -47,8 +71,8 @@ func (vs *VersionSet) RunCompact() int {
 }
 
 func (vs *VersionSet) compact(id int) {
-	vs.lock.Lock()
-	vs.lock.Unlock()
+	//vs.lock.Lock()
+	//vs.lock.Unlock()
 	c := vs.pickCompaction()
 	if c == nil || len(c.base)+len(c.target) <= 1 {
 		return
@@ -85,37 +109,48 @@ func (vs *VersionSet) compact(id int) {
 	}
 
 	ve := NewVersionEdit()
-	ve.AddFile(c.targetLevel, t)
+	ve.RecordAddFileMeta(c.targetLevel, t)
 
 	for _, meta := range c.base {
 		id := meta.id
 		t := vs.FindTable(id)
-		ve.DeleteFile(c.baseLevel, t)
-
+		ve.RecordDeleteFileMeta(c.baseLevel, t)
 	}
 	for _, meta := range c.target {
 		id := meta.id
 		t := vs.FindTable(id)
-		ve.DeleteFile(c.targetLevel, t)
+		ve.RecordDeleteFileMeta(c.targetLevel, t)
 	}
 	vs.LogAndApply(ve)
-	vs.Add(c.targetLevel, t)
+	vs.AddFileMeta(c.targetLevel, t)
 
 	// delete
+	vs.lock.Lock()
+	defer vs.lock.Unlock()
 	for _, meta := range c.base {
 		id := meta.id
 		t := vs.FindTable(id)
-		vs.Delete(c.baseLevel, t)
-		t.Delete()
+		vs.DeleteFileMeta(c.baseLevel, t)
+		//t.DeleteFileMeta()
+
+		t.DecrRef()
+
 	}
 	for _, meta := range c.target {
 		id := meta.id
 		t := vs.FindTable(id)
-		vs.Delete(c.targetLevel, t)
-		t.Delete()
+		vs.DeleteFileMeta(c.targetLevel, t)
+		//t.DeleteFileMeta()
+
+		t.DecrRef()
+
 	}
-	log.Printf("compact from level %d to level %d. create %s. delete %d files ",
+	log.Printf("compact from level %d to level %d. create %s. delete %d files \n",
 		c.baseLevel, c.targetLevel, sstName, len(ve.deletes))
+	//for _, me := range ve.deletes {
+	//	log.Printf("%d ", me.f.id)
+	//}
+	//log.Println()
 }
 
 func (vs *VersionSet) pickCompaction() *Compaction {
@@ -128,7 +163,7 @@ func (vs *VersionSet) pickCompaction() *Compaction {
 		c.targetLevel = c.baseLevel
 		return &c
 	}
-	c.base = append(c.base, vs.current.files[c.baseLevel]...)
+	//c.base = append(c.base, vs.current.files[c.baseLevel]...)
 	// TODO compact to more higher level
 	c.targetLevel = c.baseLevel + 1
 

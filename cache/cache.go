@@ -20,6 +20,7 @@ func NewCache(nblock, nindex int) *Cache {
 	return &Cache{
 		//index: NewLRUReplacer(nindex),
 		index: make(map[uint64]*sstable.IndexBlock),
+		//index: sync.Map{},
 		//table: NewLRUReplacer(100),
 		table: NewWinTinyLFU(nblock),
 		block: NewWinTinyLFU(nblock),
@@ -66,10 +67,17 @@ func (cache Cache) AddIndex(fid uint64, index *sstable.IndexBlock) {
 	cache.index[fid] = index
 }
 
+func (cache Cache) DeleteIndex(fid uint64) {
+	//cache.index.Put(fmt.Sprintf("%d", fid), b)
+	cache.indexLock.Lock()
+	defer cache.indexLock.Unlock()
+	delete(cache.index, fid)
+}
+
 func (cache Cache) GetIndex(fid uint64) *sstable.IndexBlock {
 	cache.indexLock.RLock()
 	defer cache.indexLock.RUnlock()
-
+	//index, ok := cache.index.Load(fid)
 	index, ok := cache.index[fid]
 	if ok {
 		return index

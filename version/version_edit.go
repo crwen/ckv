@@ -24,7 +24,7 @@ func NewVersionEdit() *VersionEdit {
 	}
 }
 
-func (ve *VersionEdit) AddFile(level int, t *sstable.Table) {
+func (ve *VersionEdit) RecordAddFileMeta(level int, t *sstable.Table) {
 	fm := &FileMetaData{
 		id:       t.Fid(),
 		largest:  t.MaxKey,
@@ -34,7 +34,7 @@ func (ve *VersionEdit) AddFile(level int, t *sstable.Table) {
 	ve.adds = append(ve.adds, &TableMeta{f: fm, level: level})
 }
 
-func (ve *VersionEdit) DeleteFile(level int, t *sstable.Table) {
+func (ve *VersionEdit) RecordDeleteFileMeta(level int, t *sstable.Table) {
 	fm := &FileMetaData{
 		id:       t.Fid(),
 		largest:  t.MaxKey,
@@ -42,4 +42,11 @@ func (ve *VersionEdit) DeleteFile(level int, t *sstable.Table) {
 		fileSize: t.Size(),
 	}
 	ve.deletes = append(ve.deletes, &TableMeta{f: fm, level: level})
+}
+
+func (ve *VersionEdit) DeleteFileMetas(level int, tables []*sstable.Table) {
+
+	for _, table := range tables {
+		ve.RecordDeleteFileMeta(level, table)
+	}
 }

@@ -145,8 +145,8 @@ func TestWAL(t *testing.T) {
 
 // run
 func TestLWAL_Read(t *testing.T) {
-	//clearDir()
-	//TestWAL(t)
+	clearDir()
+	TestWAL(t)
 	lsm := NewLSM(opt)
 	ee := &utils.Entry{
 		Key:   []byte(fmt.Sprintf("%d", 1111)),

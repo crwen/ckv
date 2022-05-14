@@ -3,6 +3,7 @@ package lsm
 import (
 	"SimpleKV/file"
 	"SimpleKV/utils"
+	"SimpleKV/utils/errs"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -56,7 +57,7 @@ func (mem *MemTable) Get(key []byte) (*utils.Entry, error) {
 
 	v := mem.table.Search(key)
 	if v == nil {
-		return nil, nil
+		return nil, errs.ErrEmptyKey
 	}
 	e := &utils.Entry{
 		Key:   key,

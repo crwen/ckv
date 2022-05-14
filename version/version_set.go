@@ -146,7 +146,7 @@ func (vs *VersionSet) Replay() {
 
 }
 
-func (vs *VersionSet) Add(level int, t *sstable.Table) {
+func (vs *VersionSet) AddFileMeta(level int, t *sstable.Table) {
 	vs.lock.Lock()
 	defer vs.lock.Unlock()
 	meta := &FileMetaData{
@@ -159,8 +159,7 @@ func (vs *VersionSet) Add(level int, t *sstable.Table) {
 	vs.tableCache.AddIndex(t.Fid(), t.Index())
 }
 
-func (vs *VersionSet) Delete(level int, t *sstable.Table) {
-
+func (vs *VersionSet) DeleteFileMeta(level int, t *sstable.Table) {
 	for i := 0; i < len(vs.current.files[level]); i++ {
 		if vs.current.files[level][i].id == t.Fid() {
 			vs.current.files[level] = append(vs.current.files[level][0:i], vs.current.files[level][i+1:]...)

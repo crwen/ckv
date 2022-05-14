@@ -37,6 +37,7 @@ type LSM struct {
 	lock                  *sync.RWMutex
 	cond                  *sync.Cond
 	bgCompactionScheduled bool
+	compactState          *version.CompactStatus
 }
 
 // NewLSM _
@@ -49,6 +50,7 @@ func NewLSM(opt *utils.Options) *LSM {
 	lsm := &LSM{option: opt, lock: &sync.RWMutex{}}
 	lsm.cond = sync.NewCond(lsm.lock)
 	lsm.verSet, _ = version.Open(lsm.option)
+	lsm.compactState = version.NewCompactStatus(lsm.option)
 	//lsm.lm = lsm.newLevelManager()
 	// recovery
 	lsm.memTable, lsm.immutables = lsm.recovery()
@@ -145,10 +147,10 @@ func (lsm *LSM) WriteLevel0Table(immutable *MemTable) (err error) {
 
 	// TODO update manifest
 	ve := version.NewVersionEdit()
-	ve.AddFile(level, t)
+	ve.RecordAddFileMeta(level, t)
 	lsm.verSet.LogAndApply(ve)
 
-	lsm.verSet.Add(level, t)
+	lsm.verSet.AddFileMeta(level, t)
 	//lsm.lm.levels[0].add(t)
 	//immutable.state = -1
 

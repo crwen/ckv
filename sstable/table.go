@@ -11,6 +11,7 @@ import (
 	"io"
 	"os"
 	"sync"
+	"sync/atomic"
 )
 
 // sst 的内存形式
@@ -22,6 +23,8 @@ type Table struct {
 	opt    *utils.Options
 	MinKey []byte
 	MaxKey []byte
+	ref    int32 // For file garbage collection. Atomic.
+
 }
 
 func newTable(opt *utils.Options, fid uint64) *Table {
@@ -41,18 +44,37 @@ func OpenTable(opt *utils.Options, fid uint64) *Table {
 		Flag:     os.O_CREATE | os.O_RDWR,
 		MaxSz:    int(opt.SSTableMaxSz),
 	})
+	t.IncrRef()
 	return t
 }
+
+func (t *Table) IncrRef() {
+	atomic.AddInt32(&t.ref, 1)
+}
+
+func (t *Table) DecrRef() error {
+	newRef := atomic.AddInt32(&t.ref, -1)
+	if newRef == 0 {
+		if err := t.ss.Detele(); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func (t *Table) Delete() error {
-	t.Lock()
-	defer t.Unlock()
+	//t.Lock()
+	//defer t.Unlock()
 	return t.ss.Detele()
 }
 
 func (t *Table) Serach(key []byte) (entry *utils.Entry, err error) {
-	t.RLock()
-	defer t.RUnlock()
+	//t.RLock()
+	//defer t.RUnlock()
+	//t.IncrRef()
+	//defer t.DecrRef()
 	iter := t.NewIterator(t.opt)
+	defer iter.Close()
 	//iter.seekToFirst()
 	iter.Seek(key)
 	//err = iter.err
@@ -60,12 +82,12 @@ func (t *Table) Serach(key []byte) (entry *utils.Entry, err error) {
 	//	return nil, err
 	//}
 	if !iter.Valid() {
-		iter.Close()
+		//iter.Close()
 		return nil, errs.ErrKeyNotFound
 	}
 	if t.Compare(iter.Item().Entry().Key, key) == 0 {
 		e := iter.Item().Entry()
-		iter.Close()
+		//iter.Close()
 		return e, nil
 	}
 
@@ -225,7 +247,8 @@ func (iter *TableIterator) GetFID() uint64 {
 }
 
 func (t *Table) NewIterator(options *utils.Options) TableIterator {
-	t.RLock()
+	//t.RLock()
+	t.IncrRef()
 	return TableIterator{
 		opt:       options,
 		t:         t,
@@ -273,9 +296,9 @@ func (iter *TableIterator) Item() utils.Item {
 }
 
 func (iter *TableIterator) Close() error {
-	iter.t.RUnlock()
+	//iter.t.RUnlock()
 	iter.blockIter.Close()
-	return nil
+	return iter.t.DecrRef()
 }
 
 func (iter *TableIterator) Seek(key []byte) {
