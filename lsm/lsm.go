@@ -81,13 +81,6 @@ func (lsm *LSM) Set(entry *utils.Entry) (err error) {
 		return err
 	}
 
-	//for _, imm := range lsm.immutables {
-	//	//if imm.state != -1 {
-	//	lsm.WriteLevel0Table(imm)
-	//	//}
-	//}
-	//lsm.immutables = lsm.immutables[:0]
-
 	return err
 }
 
@@ -159,20 +152,6 @@ func (lsm *LSM) WriteLevel0Table(immutable *MemTable) (err error) {
 
 // Rotate append MemTable to immutable, and create a new MemTable
 func (lsm *LSM) Rotate() {
-	//if !atomic.CompareAndSwapInt32(&lsm.memTable.state, NORMAL, IMMUTABLE) {
-	//	return
-	//}
-	//if len(lsm.immutables) > 0 {
-	//	lsm.lock.Lock()
-	//	for len(lsm.immutables) != 0 {
-	//		lsm.cond.Wait()
-	//	}
-	//} else {
-	//	lsm.immutables = append(lsm.immutables, lsm.memTable)
-	//	lsm.memTable = lsm.NewMemTable()
-	//	lsm.backgroundCall()
-	//}
-
 	lsm.lock.Lock()
 	defer lsm.lock.Unlock()
 

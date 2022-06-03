@@ -91,44 +91,8 @@ func (t *Table) Serach(key []byte) (entry *utils.Entry, err error) {
 		return e, nil
 	}
 
-	//index := t.ss.Indexs()
-	//filter := utils.Filter(index.Filter)
-	//if t.ss.HasBloomFilter() && !filter.MayContainKey(key) {
-	//	return nil, errs.ErrKeyNotFound
-	//}
-	//idx := t.findGreater(index, key)
-	//if idx < 0 {
-	//	return nil, nil
-	//}
-
-	// search block
-	//block, err := t.ReadBlock(idx)
-	//iter := BlockIterator{}
-	//iter.setBlock(block, t.opt.Comparable)
-	//iter.seekToFirst()
-	//iter.Seek(key)
-	//err = iter.Error()
-	////if err != nil {
-	////	return nil, err
-	////}
-	//if t.Compare(iter.Item().Entry().Key, key) == 0 {
-	//	return iter.Item().Entry(), nil
-	//}
-
 	// TODO cache block
 
-	//for i, bo := range block.EntryOffsets {
-	//	var k, v []byte
-	//	if i == len(block.EntryOffsets)-1 {
-	//		k, v = block.readEntry(block.Data[bo:], uint32(block.entriesIndexStart)-bo)
-	//	} else {
-	//		k, v = block.readEntry(block.Data[bo:], block.EntryOffsets[i+1]-bo)
-	//	}
-	//
-	//	if t.Compare(k, key) == 0 {
-	//		return &utils.Entry{Key: k, Value: v}, nil
-	//	}
-	//}
 	return nil, errs.ErrKeyNotFound
 
 }
@@ -220,11 +184,6 @@ func (t *Table) ReadIndex() (*IndexBlock, error) {
 
 	index := &IndexBlock{}
 	err := proto.Unmarshal(data, index)
-	//index := &IndexBlock{
-	//	BlockOffsets: make([]*BlockOffset, len(tb.blockList)),
-	//	Filter:       nil,
-	//	KeyCount:     tb.keyCount,
-	//}
 
 	return index, err
 }

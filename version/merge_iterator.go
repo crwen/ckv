@@ -22,34 +22,12 @@ func NewMergeIterator(iters []sstable.TableIterator, cmp cmp.Comparator) *MergeI
 		list: iters,
 		cmp:  cmp,
 	}
-	//switch len(iters) {
-	//case 0:
-	//	return &MergeIterator{}
-	//case 1:
-	//	return iters[0]
-	//case 2:
-	//
-	//	return merge(iters[0], iters[1])
-	//}
-	//mid := len(iters) / 2
-	//return NewMergeIterator(
-	//	[]utils.Iterator{
-	//		NewMergeIterator(iters[:mid]),
-	//		NewMergeIterator(iters[mid:]),
-	//	})
 }
 
 func merge(iter1 utils.Iterator, iter2 utils.Iterator) utils.Iterator {
 	iter1.Rewind()
 	iter2.Rewind()
-	//for ; iter1.Valid() && iter2.Valid();  {
-	//	entry1 := iter1.Item().Entry()
-	//	entry2 := iter2.Item().Entry()
-	//
-	//
-	//	iter1.Next()
-	//	iter2.Next()
-	//}
+
 	return nil
 }
 
