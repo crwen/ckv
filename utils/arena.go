@@ -90,7 +90,7 @@ func (s *Arena) Allocate(bytes uint32) uint32 {
 //	return uint32(s.usage - uint64(len(buf)))
 //}
 
-func (s *Arena) allocateAligned(blockBytes uint32) {
+func (s *Arena) allocateAligned(bytes uint32) {
 
 }
 
@@ -130,6 +130,17 @@ func (s *Arena) putVal(v []byte) uint32 {
 	return offset
 }
 
+func (s *Arena) putData(data []byte) uint32 {
+	dataSz := len(data)
+	sz := codec.VarintLength(uint64(dataSz)) + dataSz
+	offset := s.Allocate(uint32(sz))
+	buf := s.buf[offset:]
+	w := codec.EncodeVarint32(buf, uint32(dataSz))
+	AssertTrue(len(data) == copy(buf[w:], data))
+	w += len(data)
+	return offset
+}
+
 func (s *Arena) putKey(key []byte) uint32 {
 	keySz := uint32(len(key))
 	offset := s.Allocate(keySz)
@@ -165,9 +176,9 @@ func (s *Arena) PutVal(val []byte, offset uint32) uint32 {
 }
 
 func (s *Arena) getNode(offset uint32) *Node {
-	if offset == 0 {
-		return nil
-	}
+	//if offset == 0 {
+	//	return nil
+	//}
 	return (*Node)(unsafe.Pointer(&s.buf[offset]))
 }
 
@@ -179,13 +190,17 @@ func (s *Arena) getVal(offset uint32) ([]byte, int) {
 	return buf[valOff : valOff+sz], sz
 }
 
-func (s *Arena) getKey(offset uint32) ([]byte, int) {
-	//DecodeValue(s.buf[offset : offset+size])
+func (s *Arena) getData(offset uint32) ([]byte, int) {
 	buf := s.buf[offset:]
 	sz := codec.DecodeVarint32(buf)
 	keyOff := codec.VarintLength(uint64(sz))
-	seq := make([]byte, 8)
-	codec.DecodeVarint64(seq)
+	return buf[keyOff : keyOff+sz], sz
+}
+
+func (s *Arena) getKey(offset uint32) ([]byte, int) {
+	buf := s.buf[offset:]
+	sz := codec.DecodeVarint32(buf)
+	keyOff := codec.VarintLength(uint64(sz))
 	return buf[keyOff : keyOff+sz], sz + 8
 }
 

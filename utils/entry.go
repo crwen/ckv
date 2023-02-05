@@ -1,6 +1,7 @@
 package utils
 
 import (
+	"SimpleKV/utils/convert"
 	"encoding/binary"
 	"time"
 )
@@ -8,7 +9,24 @@ import (
 type ValueStruct struct {
 	Meta      byte
 	Value     []byte
+	Seq       uint64
 	ExpiresAt uint64
+}
+
+func EncodeValue(vs *ValueStruct) []byte {
+	valSz := len(vs.Value)
+	sz := valSz + 8
+	buf := make([]byte, sz, sz)
+	copy(buf, convert.U64ToBytes(vs.Seq))
+	copy(buf, vs.Value)
+	return buf[0:sz]
+}
+
+func DecodeValue(value []byte) *ValueStruct {
+	v := &ValueStruct{}
+	v.Seq = convert.BytesToU64(value[:8])
+	v.Value = value[8:]
+	return v
 }
 
 // value只持久化具体的value值和过期时间

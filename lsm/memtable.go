@@ -3,6 +3,7 @@ package lsm
 import (
 	"SimpleKV/file"
 	"SimpleKV/utils"
+	"SimpleKV/utils/convert"
 	"SimpleKV/utils/errs"
 	"fmt"
 	"os"
@@ -10,8 +11,10 @@ import (
 	"sync/atomic"
 )
 
+type Table = utils.SkipList
+
 type MemTable struct {
-	table *utils.SkipList
+	table *Table
 	arena *utils.Arena
 	wal   *WalFile
 	ref   int32
@@ -44,11 +47,14 @@ func (lsm *LSM) NewMemTable() *MemTable {
 func (mem *MemTable) set(entry *utils.Entry) error {
 
 	// write wal first
-	if err := mem.wal.Write(entry); err != nil {
-		return err
-	}
+	//if err := mem.wal.Write(entry); err != nil {
+	//	return err
+	//}
 	// write MemTable
-	mem.table.Add(entry)
+	key, val := entry.Key, entry.Value
+	//val = append(val, convert.U64ToBytes(entry.Seq|0x1)...)
+	val = append(convert.U64ToBytes(entry.Seq), val...)
+	mem.table.Add(key, val)
 
 	return nil
 }
@@ -59,10 +65,11 @@ func (mem *MemTable) Get(key []byte) (*utils.Entry, error) {
 	if v == nil {
 		return nil, errs.ErrEmptyKey
 	}
+	vs := utils.DecodeValue(v.Value)
 	e := &utils.Entry{
 		Key:   key,
-		Value: v.Value,
-		Seq:   v.Seq,
+		Value: vs.Value,
+		Seq:   vs.Seq,
 	}
 	return e, nil
 }
@@ -87,7 +94,7 @@ func mtFilePath(dir string, fid uint64) string {
 
 func (m *MemTable) recoveryMemTable(opt *utils.Options) func(*utils.Entry) error {
 	return func(e *utils.Entry) error {
-		return m.table.Add(e)
+		return m.table.Add(e.Key, e.Value)
 	}
 }
 

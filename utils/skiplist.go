@@ -2,7 +2,6 @@ package utils
 
 import (
 	"SimpleKV/utils/cmp"
-	"SimpleKV/utils/codec"
 	"fmt"
 	"github.com/pkg/errors"
 	"log"
@@ -33,9 +32,9 @@ type SkipList struct {
 type Node struct {
 	//Entry     *Entry
 	keyOffset   uint32
-	seq         uint64
 	valueOffset uint32
-	next        [kMaxHeight]*Node
+	//seq         uint64
+	next [kMaxHeight]*Node
 }
 
 // IncrRef increase the ref by 1
@@ -51,29 +50,31 @@ func (list *SkipList) DecrRef() {
 	}
 }
 
-func NewNode(arena *Arena, entry *Entry, height int) *Node {
-	keySize := len(entry.Key)
-	valSize := len(entry.Value)
-	internalKeySize := keySize + 8
+func NewNode(arena *Arena, key, value []byte, height int) *Node {
+	//keySize := len(entry.Key)
+	//valSize := len(entry.Value)
+	//internalKeySize := keySize + 8
 	//internalKeySize := keySize
-	encodedLen := codec.VarintLength(uint64(internalKeySize)) +
-		internalKeySize + codec.VarintLength(uint64(valSize)) + valSize
+	//encodedLen := codec.VarintLength(uint64(internalKeySize)) +
+	//	internalKeySize + codec.VarintLength(uint64(valSize)) + valSize
+	//
+	//offset := arena.Allocate(uint32(encodedLen))
+	keyOff := arena.putData(key)
+	valueOff := arena.putData(value)
 
-	offset := arena.Allocate(uint32(encodedLen))
-	kw := arena.PutKey(entry.Key, offset)
+	//kw := arena.PutKey(entry.Key, offset)
 	//sequence := time.Now().UnixMilli()
 	//sequence := atomic.AddUint64(&seq, 1)
-	sw := arena.PutSeq(uint64(entry.Seq), offset+kw)
-	arena.PutVal(entry.Value, offset+sw+kw)
+	//sw := arena.PutSeq(uint64(entry.Seq), offset+kw)
+	//arena.PutVal(entry.Value, offset+sw+kw)
 	//arena.PutVal(entry.Value, offset+kw)
 
 	nodeOffset := arena.putNode(height)
-
 	node := arena.getNode(nodeOffset)
 	//node.key = &Key{keyOffset: offset, keySize: uint32(keySize)}
-	node.keyOffset = offset
-	node.seq = uint64(entry.Seq)
-	node.valueOffset = offset + sw + kw
+	node.keyOffset = keyOff
+	//node.seq = uint64(entry.Seq)
+	node.valueOffset = valueOff
 	//node.valueOffset = offset + kw
 	//node.value = &Value{valueOffset: offset + kw, valueSize: uint32(valSize)}
 	//node.next = make([]*Node, height)
@@ -90,22 +91,28 @@ func (node *Node) Next(height int) *Node {
 }
 
 func (node *Node) getKey(arena *Arena) []byte {
-	k, _ := arena.getKey(node.keyOffset)
+	//k, _ := arena.getKey(node.keyOffset)
+	k, _ := arena.getData(node.keyOffset)
 	return k
+	//return node.key
 }
 
 func (node *Node) getValue(arena *Arena) []byte {
-	v, _ := arena.getVal(node.valueOffset)
+	//v, _ := arena.getVal(node.valueOffset)
+	v, _ := arena.getData(node.valueOffset)
 	return v
+	//return node.value
 }
 func (node *Node) getSeq(arena *Arena) uint64 {
-	seq := arena.getSeq(node.valueOffset - 8)
-	return seq
+	//seq := arena.getSeq(node.valueOffset - 8)
+	//return seq
+	return 0
 }
 
 func NewSkipList(arena *Arena) *SkipList {
 	list := &SkipList{
-		head:       NewNode(arena, &Entry{Key: []byte{0}}, kMaxHeight),
+		//head:       NewNode(arena, &Entry{Key: []byte{0}}, kMaxHeight),
+		head:       NewNode(arena, []byte{0}, []byte{0}, kMaxHeight),
 		maxHeight:  0,
 		rand:       r,
 		arena:      arena,
@@ -117,7 +124,8 @@ func NewSkipList(arena *Arena) *SkipList {
 
 func NewSkipListWithComparator(arena *Arena, comparator cmp.Comparator) *SkipList {
 	list := &SkipList{
-		head:       NewNode(arena, &Entry{Key: []byte{0}}, kMaxHeight),
+		//head:       NewNode(arena, &Entry{Key: []byte{0}}, kMaxHeight),
+		head:       NewNode(arena, []byte{0}, []byte{0}, kMaxHeight),
 		maxHeight:  0,
 		rand:       r,
 		arena:      arena,
@@ -155,11 +163,11 @@ func (list *SkipList) FindGreaterOrEqual(key []byte, prev []*Node) *Node {
 	return p
 }
 
-func (list *SkipList) Add(entry *Entry) error {
+func (list *SkipList) Add(key, value []byte) error {
 	list.lock.Lock()
 	defer list.lock.Unlock()
 	prev := make([]*Node, kMaxHeight)
-	p := list.FindGreaterOrEqual(entry.Key, prev)
+	p := list.FindGreaterOrEqual(key, prev)
 	//if p.next[0] != nil && bytes.Compare(entry.Key, p.next[0].Entry.Key) == 0 {
 	//	return nil
 	//}
@@ -171,7 +179,7 @@ func (list *SkipList) Add(entry *Entry) error {
 		list.maxHeight = height
 	}
 
-	p = NewNode(list.arena, entry, height)
+	p = NewNode(list.arena, key, value, height)
 	for i := 0; i < height; i++ {
 		next := prev[i].next[i]
 		p.next[i] = next

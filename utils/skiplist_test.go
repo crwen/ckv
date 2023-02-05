@@ -9,6 +9,20 @@ import (
 	"testing"
 )
 
+func TestSkipListSingleElement(t *testing.T) {
+
+	list := NewSkipListWithComparator(NewArena(1<<20), cmp.IntComparator{})
+	key, val := fmt.Sprintf("%d", 3), fmt.Sprintf("%d", 5)
+	entry := NewEntry([]byte(key), []byte(val))
+	res := list.Add(entry.Key, entry.Value)
+	assert.Equal(t, res, nil)
+	list.PrintSkipList()
+
+	searchVal := list.Search([]byte(key))
+	assert.NotNil(t, searchVal)
+	assert.Equal(t, searchVal.Value, []byte(val))
+}
+
 func TestSkipListAdd(t *testing.T) {
 	//list := NewSkipList(NewArena(1 << 20))
 	list := NewSkipListWithComparator(NewArena(1<<20), cmp.IntComparator{})
@@ -18,7 +32,8 @@ func TestSkipListAdd(t *testing.T) {
 		//number := rand.Intn(10000)
 		key, val = fmt.Sprintf("%d", i), fmt.Sprintf("%d", i)
 		entry := NewEntry([]byte(key), []byte(val))
-		res := list.Add(entry)
+		res := list.Add(entry.Key, entry.Value)
+		//res := list.Add(entry)
 		//list.AddFileMeta(entry)
 		assert.Equal(t, res, nil)
 		searchVal := list.Search([]byte(key))
@@ -28,7 +43,9 @@ func TestSkipListAdd(t *testing.T) {
 		//number := rand.Intn(10000)
 		key, val = fmt.Sprintf("%d", i), fmt.Sprintf("%d", i+1)
 		entry := NewEntry([]byte(key), []byte(val))
-		res := list.Add(entry)
+		//res := list.Add(entry.Key, entry.Value)
+		res := list.Add(entry.Key, entry.Value)
+		//res := list.Add(entry)
 		//list.AddFileMeta(entry)
 		assert.Equal(t, res, nil)
 		searchVal := list.Search([]byte(key))
@@ -46,7 +63,8 @@ func TestSkipListComparatorAdd(t *testing.T) {
 		//number := rand.Intn(10000)
 		key, val = fmt.Sprintf("%d", i), fmt.Sprintf("%d", i)
 		entry := NewEntry([]byte(key), []byte(val))
-		res := list.Add(entry)
+		res := list.Add(entry.Key, entry.Value)
+		//res := list.Add(entry)
 		//list.AddFileMeta(entry)
 		assert.Equal(t, res, nil)
 		searchVal := list.Search([]byte(key))
@@ -60,11 +78,11 @@ func TestSkipListBasicCRUD(t *testing.T) {
 
 	//Put & Get
 	entry1 := NewEntry([]byte("Key1"), []byte("Val1"))
-	assert.Nil(t, list.Add(entry1))
+	assert.Nil(t, list.Add(entry1.Key, entry1.Value))
 	assert.Equal(t, entry1.Value, list.Search(entry1.Key).Value)
 
 	entry2 := NewEntry([]byte("Key2"), []byte("Val2"))
-	assert.Nil(t, list.Add(entry2))
+	assert.Nil(t, list.Add(entry2.Key, entry2.Value))
 	assert.Equal(t, entry2.Value, list.Search(entry2.Key).Value)
 
 	//Get a not exist entry
@@ -72,7 +90,7 @@ func TestSkipListBasicCRUD(t *testing.T) {
 
 	//Update a entry
 	entry2_new := NewEntry([]byte("Key1"), []byte("Val1+1"))
-	assert.Nil(t, list.Add(entry2_new))
+	assert.Nil(t, list.Add(entry2_new.Key, entry2_new.Value))
 	list.PrintSkipList()
 
 	assert.Equal(t, entry2_new.Value, list.Search(entry2_new.Key).Value)
@@ -87,7 +105,7 @@ func Benchmark_SkipListBasicCRUD(b *testing.B) {
 		//number := rand.Intn(10000)
 		key, val = fmt.Sprintf("Key%0130d", i), fmt.Sprintf("Val%0130d", i)
 		entry := NewEntry([]byte(key), []byte(val))
-		res := list.Add(entry)
+		res := list.Add(entry.Key, entry.Value)
 		assert.Equal(b, res, nil)
 		searchVal := list.Search([]byte(key))
 		assert.Equal(b, searchVal.Value, []byte(val))
@@ -105,7 +123,8 @@ func TestConcurrentBasic(t *testing.T) {
 		wg.Add(1)
 		go func(i int) {
 			defer wg.Done()
-			assert.Nil(t, l.Add(NewEntry(key(i), key(i))))
+			e := NewEntry(key(i), key(i))
+			assert.Nil(t, l.Add(e.Key, e.Value))
 		}(i)
 	}
 	wg.Wait()
@@ -137,7 +156,8 @@ func Benchmark_ConcurrentBasic(b *testing.B) {
 		wg.Add(1)
 		go func(i int) {
 			defer wg.Done()
-			assert.Nil(b, l.Add(NewEntry(key(i), key(i))))
+			e := NewEntry(key(i), key(i))
+			assert.Nil(b, l.Add(e.Key, e.Value))
 		}(i)
 	}
 	wg.Wait()
@@ -163,7 +183,8 @@ func TestSkipListIterator(t *testing.T) {
 	for i := 0; i < 10000; i++ {
 		key := []byte(fmt.Sprintf("%05d", i))
 		v := []byte(fmt.Sprintf("%05d", i))
-		list.Add(&Entry{Key: key, Value: v})
+		//list.Add(&Entry{Key: key, Value: v})
+		list.Add(key, v)
 		assert.Equal(t, []byte(fmt.Sprintf("%05d", i)), list.Search(key).Value)
 	}
 	for i := 0; i < 10000; i++ {
