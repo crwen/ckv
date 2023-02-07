@@ -3,6 +3,7 @@ package lsm
 import (
 	"SimpleKV/file"
 	"SimpleKV/utils"
+	"SimpleKV/utils/cmp"
 	"SimpleKV/utils/convert"
 	"SimpleKV/utils/errs"
 	"fmt"
@@ -12,6 +13,43 @@ import (
 )
 
 type Table = utils.SkipList
+
+type InternalComparator struct {
+	userComparator cmp.Comparator
+}
+
+func (cmp InternalComparator) Compare(a, b []byte) int {
+	res := cmp.userComparator.Compare(getKey(a), getKey(b))
+	if res == 0 {
+		seqa, seqb := getSeq(a), getSeq(b)
+		if seqa > seqb {
+			res = -1
+		} else if seqa < seqb {
+			res = 1
+		} else {
+			res = 0
+		}
+	}
+	return res
+}
+
+func newInternalComparator(comparator cmp.Comparator) InternalComparator {
+	return InternalComparator{userComparator: comparator}
+}
+
+func getKey(data []byte) []byte {
+	if len(data) < 8 {
+		return nil
+	}
+	return data[8:]
+}
+
+func getSeq(data []byte) uint64 {
+	if len(data) < 8 {
+		return 0
+	}
+	return convert.BytesToU64(data[:8])
+}
 
 type MemTable struct {
 	table *Table
@@ -23,7 +61,7 @@ type MemTable struct {
 
 // NewMemtable _
 func (lsm *LSM) NewMemTable() *MemTable {
-	arena := utils.NewArena(lsm.option.MemTableSize)
+	arena := utils.NewArena()
 
 	//newFid := atomic.AddUint64(&(lsm.maxFID), 1)
 	newFid := lsm.IncreaseFid(1)
@@ -35,8 +73,30 @@ func (lsm *LSM) NewMemTable() *MemTable {
 		MaxSz:    int(lsm.option.MemTableSize),
 	}
 	m := &MemTable{
-		table: utils.NewSkipListWithComparator(arena, lsm.option.Comparable),
+		table: utils.NewSkipListWithComparator(arena, newInternalComparator(lsm.option.Comparable)),
 		wal:   OpenWalFile(fileOpt),
+		arena: arena,
+		state: NORMAL,
+	}
+	m.IncrRef()
+	return m
+}
+
+func NewMemTable() *MemTable {
+	arena := utils.NewArena()
+
+	//newFid := atomic.AddUint64(&(lsm.maxFID), 1)
+	//newFid := lsm.IncreaseFid(1)
+	//fileOpt := &file.Options{
+	//	FID:      newFid,
+	//	FileName: mtFilePath(lsm.option.WorkDir, newFid),
+	//	Dir:      lsm.option.WorkDir,
+	//	Flag:     os.O_CREATE | os.O_RDWR,
+	//	MaxSz:    int(lsm.option.MemTableSize),
+	//}
+	m := &MemTable{
+		table: utils.NewSkipListWithComparator(arena, newInternalComparator(cmp.ByteComparator{})),
+		//wal:   OpenWalFile(fileOpt),
 		arena: arena,
 		state: NORMAL,
 	}
@@ -53,7 +113,7 @@ func (mem *MemTable) set(entry *utils.Entry) error {
 	// write MemTable
 	key, val := entry.Key, entry.Value
 	//val = append(val, convert.U64ToBytes(entry.Seq|0x1)...)
-	val = append(convert.U64ToBytes(entry.Seq), val...)
+	key = append(convert.U64ToBytes(entry.Seq), key...)
 	mem.table.Add(key, val)
 
 	return nil

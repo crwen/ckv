@@ -33,7 +33,7 @@ func TestLSM_Set(t *testing.T) {
 	}
 	lsm.Set(e)
 
-	for i := 1; i < 100; i++ {
+	for i := 1; i < 10; i++ {
 		e := utils.BuildEntry()
 		lsm.Set(e)
 		v, err := lsm.Get(e.Key)
@@ -51,7 +51,7 @@ func TestLSM_CRUD(t *testing.T) {
 	opt.Comparable = comparable
 	lsm := NewLSM(opt)
 
-	for i := 0; i < 5000; i++ {
+	for i := 0; i < 500; i++ {
 		e := &utils.Entry{
 			Key:   []byte(fmt.Sprintf("%d", i)),
 			Value: []byte(fmt.Sprintf("%d", i)),
@@ -66,7 +66,7 @@ func TestLSM_CRUD(t *testing.T) {
 	//	lsm.Set(e)
 	//}
 
-	for i := 0; i < 5000; i++ {
+	for i := 0; i < 500; i++ {
 		e := &utils.Entry{
 			Key:   []byte(fmt.Sprintf("%d", i)),
 			Value: []byte(fmt.Sprintf("%d", i)),

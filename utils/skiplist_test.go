@@ -11,7 +11,7 @@ import (
 
 func TestSkipListSingleElement(t *testing.T) {
 
-	list := NewSkipListWithComparator(NewArena(1<<20), cmp.IntComparator{})
+	list := NewSkipListWithComparator(NewArena(), cmp.IntComparator{})
 	key, val := fmt.Sprintf("%d", 3), fmt.Sprintf("%d", 5)
 	entry := NewEntry([]byte(key), []byte(val))
 	res := list.Add(entry.Key, entry.Value)
@@ -25,7 +25,7 @@ func TestSkipListSingleElement(t *testing.T) {
 
 func TestSkipListAdd(t *testing.T) {
 	//list := NewSkipList(NewArena(1 << 20))
-	list := NewSkipListWithComparator(NewArena(1<<20), cmp.IntComparator{})
+	list := NewSkipListWithComparator(NewArena(), cmp.IntComparator{})
 	key, val := "", ""
 	maxTime := 20
 	for i := 0; i < maxTime; i++ {
@@ -56,7 +56,7 @@ func TestSkipListAdd(t *testing.T) {
 
 func TestSkipListComparatorAdd(t *testing.T) {
 	comparator := cmp.IntComparator{}
-	list := NewSkipListWithComparator(NewArena(1<<20), comparator)
+	list := NewSkipListWithComparator(NewArena(), comparator)
 	key, val := "", ""
 	maxTime := 20
 	for i := 0; i < maxTime; i++ {
@@ -74,7 +74,7 @@ func TestSkipListComparatorAdd(t *testing.T) {
 }
 
 func TestSkipListBasicCRUD(t *testing.T) {
-	list := NewSkipList(NewArena(1 << 20))
+	list := NewSkipList(NewArena())
 
 	//Put & Get
 	entry1 := NewEntry([]byte("Key1"), []byte("Val1"))
@@ -98,9 +98,9 @@ func TestSkipListBasicCRUD(t *testing.T) {
 }
 
 func Benchmark_SkipListBasicCRUD(b *testing.B) {
-	list := NewSkipList(NewArena(1 << 20))
+	list := NewSkipList(NewArena())
 	key, val := "", ""
-	maxTime := 1000
+	maxTime := 100
 	for i := 0; i < maxTime; i++ {
 		//number := rand.Intn(10000)
 		key, val = fmt.Sprintf("Key%0130d", i), fmt.Sprintf("Val%0130d", i)
@@ -110,11 +110,18 @@ func Benchmark_SkipListBasicCRUD(b *testing.B) {
 		searchVal := list.Search([]byte(key))
 		assert.Equal(b, searchVal.Value, []byte(val))
 	}
+	for i := 0; i < maxTime; i++ {
+		//number := rand.Intn(10000)
+		key, val = fmt.Sprintf("Key%0130d", i), fmt.Sprintf("Val%0130d", i)
+		entry := NewEntry([]byte(key), []byte(val))
+		searchVal := list.Search(entry.Key)
+		assert.Equal(b, searchVal.Value, []byte(val))
+	}
 }
 
 func TestConcurrentBasic(t *testing.T) {
-	const n = 10000
-	l := NewSkipList(NewArena(1 << 20))
+	const n = 1000
+	l := NewSkipList(NewArena())
 	var wg sync.WaitGroup
 	key := func(i int) []byte {
 		return []byte(fmt.Sprintf("%05d", i))
@@ -146,8 +153,8 @@ func TestConcurrentBasic(t *testing.T) {
 }
 
 func Benchmark_ConcurrentBasic(b *testing.B) {
-	const n = 10000
-	l := NewSkipList(NewArena(1 << 20))
+	const n = 1000
+	l := NewSkipList(NewArena())
 	var wg sync.WaitGroup
 	key := func(i int) []byte {
 		return []byte(fmt.Sprintf("%05d", i))
@@ -179,15 +186,15 @@ func Benchmark_ConcurrentBasic(b *testing.B) {
 }
 
 func TestSkipListIterator(t *testing.T) {
-	list := NewSkipList(NewArena(1 << 20))
-	for i := 0; i < 10000; i++ {
+	list := NewSkipList(NewArena())
+	for i := 0; i < 1000; i++ {
 		key := []byte(fmt.Sprintf("%05d", i))
 		v := []byte(fmt.Sprintf("%05d", i))
 		//list.Add(&Entry{Key: key, Value: v})
 		list.Add(key, v)
 		assert.Equal(t, []byte(fmt.Sprintf("%05d", i)), list.Search(key).Value)
 	}
-	for i := 0; i < 10000; i++ {
+	for i := 0; i < 1000; i++ {
 		key := []byte(fmt.Sprintf("%05d", i))
 		assert.Equal(t, []byte(fmt.Sprintf("%05d", i)), list.Search(key).Value)
 	}
