@@ -1,13 +1,11 @@
 package lsm
 
 import (
-	"SimpleKV/file"
 	"SimpleKV/utils"
 	"SimpleKV/utils/cmp"
 	"SimpleKV/utils/convert"
 	"SimpleKV/utils/errs"
 	"fmt"
-	"os"
 	"path/filepath"
 	"sync/atomic"
 )
@@ -60,29 +58,7 @@ type MemTable struct {
 }
 
 // NewMemtable _
-func (lsm *LSM) NewMemTable() *MemTable {
-	arena := utils.NewArena()
-
-	//newFid := atomic.AddUint64(&(lsm.maxFID), 1)
-	newFid := lsm.IncreaseFid(1)
-	fileOpt := &file.Options{
-		FID:      newFid,
-		FileName: mtFilePath(lsm.option.WorkDir, newFid),
-		Dir:      lsm.option.WorkDir,
-		Flag:     os.O_CREATE | os.O_RDWR,
-		MaxSz:    int(lsm.option.MemTableSize),
-	}
-	m := &MemTable{
-		table: utils.NewSkipListWithComparator(arena, newInternalComparator(lsm.option.Comparable)),
-		wal:   OpenWalFile(fileOpt),
-		arena: arena,
-		state: NORMAL,
-	}
-	m.IncrRef()
-	return m
-}
-
-func NewMemTable() *MemTable {
+func NewMemTable(comparator cmp.Comparator, wal *WalFile) *MemTable {
 	arena := utils.NewArena()
 
 	//newFid := atomic.AddUint64(&(lsm.maxFID), 1)
@@ -95,8 +71,8 @@ func NewMemTable() *MemTable {
 	//	MaxSz:    int(lsm.option.MemTableSize),
 	//}
 	m := &MemTable{
-		table: utils.NewSkipListWithComparator(arena, newInternalComparator(cmp.ByteComparator{})),
-		//wal:   OpenWalFile(fileOpt),
+		table: utils.NewSkipListWithComparator(arena, newInternalComparator(comparator)),
+		wal:   wal,
 		arena: arena,
 		state: NORMAL,
 	}
@@ -104,12 +80,15 @@ func NewMemTable() *MemTable {
 	return m
 }
 
-func (mem *MemTable) set(entry *utils.Entry) error {
+func (mem *MemTable) Set(entry *utils.Entry) error {
 
 	// write wal first
-	//if err := mem.wal.Write(entry); err != nil {
-	//	return err
-	//}
+	if mem.wal != nil {
+		if err := mem.wal.Write(entry); err != nil {
+			return err
+		}
+	}
+
 	// write MemTable
 	key, val := entry.Key, entry.Value
 	//val = append(val, convert.U64ToBytes(entry.Seq|0x1)...)
@@ -119,17 +98,23 @@ func (mem *MemTable) set(entry *utils.Entry) error {
 	return nil
 }
 
-func (mem *MemTable) Get(key []byte) (*utils.Entry, error) {
+func (mem *MemTable) Get(key []byte, seq uint64) (*utils.Entry, error) {
 
-	v := mem.table.Search(key)
+	internalKey := append(convert.U64ToBytes(seq), key...)
+	v := mem.table.Search(internalKey)
 	if v == nil {
 		return nil, errs.ErrEmptyKey
 	}
-	vs := utils.DecodeValue(v.Value)
+	//vs := utils.DecodeValue(v.Value)
+	//e := &utils.Entry{
+	//	Key:   key,
+	//	Value: vs.Value,
+	//	Seq:   vs.Seq,
+	//}
 	e := &utils.Entry{
 		Key:   key,
-		Value: vs.Value,
-		Seq:   vs.Seq,
+		Value: v.Value,
+		Seq:   v.Seq,
 	}
 	return e, nil
 }

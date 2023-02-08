@@ -29,6 +29,7 @@ var (
 type LSM struct {
 	memTable   *MemTable
 	immutables []*MemTable
+	wal        *WalFile
 	option     *utils.Options
 	//lm         *levelManager
 	verSet *version.VersionSet
@@ -71,13 +72,15 @@ func (lsm *LSM) Set(entry *utils.Entry) (err error) {
 		return errs.ErrEmptyKey
 	}
 
+	// write wal first
+
 	// TODO 计算内存大小
 	if lsm.memTable.Size() > lsm.option.MemTableSize {
 		lsm.Rotate()
 	}
 	sequence := atomic.AddUint64(&lsm.seq, 1)
 	entry.Seq = sequence
-	if err = lsm.memTable.set(entry); err != nil {
+	if err = lsm.memTable.Set(entry); err != nil {
 		return err
 	}
 
@@ -95,13 +98,13 @@ func (lsm *LSM) Get(key []byte) (*utils.Entry, error) {
 		err   error
 	)
 	// serach from memtable first
-	if entry, err = lsm.memTable.Get(key); entry != nil && entry.Value != nil {
+	if entry, err = lsm.memTable.Get(key, lsm.seq); entry != nil && entry.Value != nil {
 		return entry, err
 	}
 
 	// search from immutable, beginning at the newest immutable
 	for i := len(lsm.immutables) - 1; i >= 0; i-- {
-		if entry, err = lsm.immutables[i].Get(key); entry != nil && entry.Value != nil {
+		if entry, err = lsm.immutables[i].Get(key, lsm.seq); entry != nil && entry.Value != nil {
 			return entry, err
 		}
 	}
@@ -162,7 +165,7 @@ func (lsm *LSM) Rotate() {
 			lsm.cond.Wait()
 		} else {
 			lsm.immutables = append(lsm.immutables, lsm.memTable)
-			lsm.memTable = lsm.NewMemTable()
+			lsm.memTable = NewMemTable(lsm.option.Comparable, lsm.openWal())
 			lsm.maybeScheduleCompaction()
 		}
 	}
@@ -211,7 +214,20 @@ func (lsm *LSM) recovery() (*MemTable, []*MemTable) {
 		lsm.WriteLevel0Table(imm)
 	}
 	lsm.immutables = lsm.immutables[:0]
-	return lsm.NewMemTable(), imms[:0]
+
+	return NewMemTable(lsm.option.Comparable, lsm.openWal()), imms[:0]
+}
+
+func (lsm *LSM) openWal() *WalFile {
+	newFid := lsm.IncreaseFid(1)
+	fileOpt := &file.Options{
+		FID:      newFid,
+		FileName: mtFilePath(lsm.option.WorkDir, newFid),
+		Dir:      lsm.option.WorkDir,
+		Flag:     os.O_CREATE | os.O_RDWR,
+		MaxSz:    int(lsm.option.MemTableSize),
+	}
+	return OpenWalFile(fileOpt)
 }
 
 func (lsm *LSM) openMemTable(fid uint64) (*MemTable, error) {
@@ -223,7 +239,7 @@ func (lsm *LSM) openMemTable(fid uint64) (*MemTable, error) {
 		FileName: mtFilePath(lsm.option.WorkDir, fid),
 	}
 	//mt := lsm.NewMemTable()
-	arena := utils.NewArena(1 << 20)
+	arena := utils.NewArena()
 	mt := &MemTable{
 		table: utils.NewSkipListWithComparator(arena, lsm.option.Comparable),
 		arena: arena,
