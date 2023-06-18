@@ -49,10 +49,37 @@ func TestWalFileWrite(t *testing.T) {
 	assert.Nil(t, err)
 
 	wal.Iterate(func(e *utils.Entry) error {
-		//assert.Equal(t, ent.Key, e.Key)
-		//assert.Equal(t, ent.Value, e.Value)
-		fmt.Println(ent.Key, ent.Value)
-		fmt.Println(e.Key, e.Value)
+		assert.Equal(t, ent.Key, e.Key)
+		assert.Equal(t, ent.Value, e.Value)
+		return nil
+	})
+
+	clearDir()
+}
+
+func TestWalFileWriteManyTimes(t *testing.T) {
+	clearDir()
+
+	options := initOpt()
+	wal := OpenWalFile(options)
+	assert.NotNil(t, wal)
+
+	m := make(map[string]string)
+
+	n := 10000
+	for i := 0; i < n; i++ {
+		ent := buildEntry()
+		err := wal.Write(ent)
+		assert.Nil(t, err)
+		m[string(ent.Key)] = string(ent.Value)
+	}
+
+	wal.Iterate(func(e *utils.Entry) error {
+		if v, ok := m[string(e.Key)]; !ok {
+			return fmt.Errorf(fmt.Sprintf("key %v  not found!", string(e.Key)))
+		} else {
+			assert.Equal(t, v, string(e.Value))
+		}
 		return nil
 	})
 

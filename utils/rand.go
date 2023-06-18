@@ -35,10 +35,8 @@ func randStr(length int) string {
 // 构建entry对象
 func BuildEntry() *Entry {
 	rand.Seed(time.Now().Unix())
-	key := []byte(fmt.Sprintf("%s%s", randStr(16), "12345678"))
+	key := []byte(fmt.Sprintf("%s%s", randStr(16), "12345678牛马"))
 	value := []byte(randStr(128))
-	// key := []byte(fmt.Sprintf("%s%s", "硬核课堂", "12345678"))
-	// value := []byte("硬核😁课堂")
 	expiresAt := uint64(time.Now().Add(12*time.Hour).UnixNano() / 1e6)
 	return &Entry{
 		Key:       key,
