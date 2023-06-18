@@ -1,9 +1,9 @@
 package version
 
 import (
-	"SimpleKV/sstable"
-	"SimpleKV/utils"
-	"SimpleKV/utils/cmp"
+	"ckv/sstable"
+	"ckv/utils"
+	"ckv/utils/cmp"
 	"sort"
 )
 

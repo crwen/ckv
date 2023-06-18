@@ -1,7 +1,7 @@
 package version
 
 import (
-	"SimpleKV/utils"
+	"ckv/utils"
 	"encoding/binary"
 	"os"
 )

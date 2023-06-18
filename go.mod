@@ -1,4 +1,4 @@
-module SimpleKV
+module ckv
 
 go 1.17
 

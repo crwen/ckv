@@ -1,12 +1,12 @@
 package lsm
 
 import (
-	"SimpleKV/file"
-	"SimpleKV/sstable"
-	"SimpleKV/utils"
-	"SimpleKV/utils/cmp"
-	"SimpleKV/utils/errs"
-	"SimpleKV/version"
+	"ckv/file"
+	"ckv/sstable"
+	"ckv/utils"
+	"ckv/utils/cmp"
+	"ckv/utils/errs"
+	"ckv/version"
 	"io/ioutil"
 	"os"
 	"sort"

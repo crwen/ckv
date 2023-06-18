@@ -1,8 +1,8 @@
 package codec
 
 import (
-	"SimpleKV/utils/convert"
-	"SimpleKV/utils/errs"
+	"ckv/utils/convert"
+	"ckv/utils/errs"
 	"encoding/binary"
 	"github.com/pkg/errors"
 	"hash/crc32"

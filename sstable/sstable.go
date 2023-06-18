@@ -1,8 +1,8 @@
 package sstable
 
 import (
-	"SimpleKV/file"
-	"SimpleKV/utils/errs"
+	"ckv/file"
+	"ckv/utils/errs"
 	"io"
 	"os"
 	"sync"

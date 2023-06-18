@@ -1,7 +1,7 @@
 package cache
 
 import (
-	"SimpleKV/sstable"
+	"ckv/sstable"
 	"fmt"
 	"sync"
 )

@@ -1,7 +1,7 @@
 package utils
 
 import (
-	"SimpleKV/utils/cmp"
+	"ckv/utils/cmp"
 	"fmt"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -16,6 +16,23 @@ func TestSkipListSingleElement(t *testing.T) {
 	entry := NewEntry([]byte(key), []byte(val))
 	res := list.Add(entry.Key, entry.Value)
 	assert.Equal(t, res, nil)
+	list.PrintSkipList()
+
+	searchVal := list.Search([]byte(key))
+	assert.NotNil(t, searchVal)
+	assert.Equal(t, searchVal.Value, []byte(val))
+}
+
+func TestSkipListDupElement(t *testing.T) {
+
+	list := NewSkipListWithComparator(NewArena(), cmp.IntComparator{})
+	key, val := fmt.Sprintf("%d", 3), fmt.Sprintf("%d", 5)
+	entry := NewEntry([]byte(key), []byte(val))
+	res := list.Add(entry.Key, entry.Value)
+	assert.Equal(t, res, nil)
+	res = list.Add(entry.Key, entry.Value)
+	assert.Equal(t, res, nil)
+
 	list.PrintSkipList()
 
 	searchVal := list.Search([]byte(key))

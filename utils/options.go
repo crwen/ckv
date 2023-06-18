@@ -1,6 +1,6 @@
 package utils
 
-import "SimpleKV/utils/cmp"
+import "ckv/utils/cmp"
 
 // TODO options
 // Options to control the behavior of a database (passed to DB::Open)

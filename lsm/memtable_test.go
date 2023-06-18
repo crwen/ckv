@@ -1,14 +1,22 @@
 package lsm
 
 import (
-	"SimpleKV/utils"
-	"SimpleKV/utils/cmp"
+	"ckv/utils"
+	"ckv/utils/cmp"
+	"ckv/utils/errs"
 	"fmt"
 	"github.com/stretchr/testify/assert"
 	"testing"
 )
 
 func TestMemTableCreate(t *testing.T) {
+	mem := NewMemTable(cmp.ByteComparator{}, nil)
+	val, err := mem.Get([]byte{1}, 0)
+	assert.Nil(t, val)
+	assert.Equal(t, err, errs.ErrEmptyKey)
+}
+
+func TestMemTableUpdate(t *testing.T) {
 	mem := NewMemTable(cmp.ByteComparator{}, nil)
 	mem.Set(&utils.Entry{
 		Key:   []byte("123"),

@@ -1,6 +1,6 @@
 package version
 
-import "SimpleKV/sstable"
+import "ckv/sstable"
 
 type VersionEdit struct {
 	//logNumber      uint64

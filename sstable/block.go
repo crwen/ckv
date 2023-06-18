@@ -1,10 +1,10 @@
 package sstable
 
 import (
-	"SimpleKV/utils"
-	"SimpleKV/utils/cmp"
-	"SimpleKV/utils/codec"
-	"SimpleKV/utils/convert"
+	"ckv/utils"
+	"ckv/utils/cmp"
+	"ckv/utils/codec"
+	"ckv/utils/convert"
 	"io"
 	"unsafe"
 )

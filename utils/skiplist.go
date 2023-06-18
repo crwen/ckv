@@ -1,13 +1,14 @@
 package utils
 
 import (
-	"SimpleKV/utils/cmp"
+	"ckv/utils/cmp"
 	"fmt"
-	"github.com/pkg/errors"
 	"log"
 	"math/rand"
 	"sync"
 	"sync/atomic"
+
+	"github.com/pkg/errors"
 )
 
 const (
@@ -104,7 +105,7 @@ func (node *Node) getValue(arena *Arena) []byte {
 	//return node.value
 }
 func (node *Node) getSeq(arena *Arena) uint64 {
-	//seq := arena.getSeq(node.valueOffset - 8)
+	// seq := arena.getSeq(node.valueOffset - 8)
 	//return seq
 	return 0
 }
@@ -145,19 +146,20 @@ func (list *SkipList) FindGreaterOrEqual(key []byte, prev []*Node) *Node {
 	level := list.GetMaxHeight() - 1
 
 	for i := level; i >= 0; i-- {
-		for next := p.next[i]; next != nil; {
-			if list.KeyIsAfterNode(key, next) {
-				//if prev != nil && list.compare(calcScore(entry.Key), entry.Key, next) == 0 {
-				//	next.Entry.Value = entry.Value
-				//}
-				break
-			} else {
+		for next := p.next[i]; ; {
+			if list.KeyIsAfterNode(key, next) { // key > next->key
 				p = next
 				next = next.next[i]
+			} else { // key <= next
+				if prev != nil {
+					prev[i] = p
+				}
+				if i == 0 {
+					return next
+				}
+				// search next level
+				break
 			}
-		}
-		if prev != nil {
-			prev[i] = p
 		}
 	}
 	return p
@@ -189,7 +191,7 @@ func (list *SkipList) Add(key, value []byte) error {
 	return nil
 }
 
-//func (list *SkipList) Search(key []byte) []byte {
+// func (list *SkipList) Search(key []byte) []byte {
 func (list *SkipList) Search(key []byte) *Entry {
 	list.lock.RLock()
 	defer list.lock.RUnlock()
@@ -198,17 +200,20 @@ func (list *SkipList) Search(key []byte) *Entry {
 	for i := level; i >= 0; i-- {
 		for next := p.next[i]; next != nil; {
 			if list.KeyIsAfterNode(key, next) {
-				if i == 0 && list.comparator.Compare(key, next.getKey(list.arena)) == 0 {
+				p = next
+				next = next.next[i]
+			} else {
+				// if i == 0 && list.comparator.Compare(key, next.getKey(list.arena)) == 0 {
+				if i == 0 {
 					e := &Entry{Key: key}
 					e.Value = next.getValue(list.arena)
 					e.Seq = next.getSeq(list.arena)
-					//e.Seq
+					// //e.Seq
+					// return e
 					return e
 				}
+				// search next level
 				break
-			} else {
-				p = next
-				next = next.next[i]
 			}
 		}
 	}
@@ -220,7 +225,8 @@ func (list *SkipList) GetMaxHeight() int {
 }
 
 func (list *SkipList) KeyIsAfterNode(key []byte, next *Node) bool {
-	if next != nil && list.comparator.Compare(key, next.getKey(list.arena)) <= 0 {
+	// if next != nil && list.comparator.Compare(key, next.getKey(list.arena)) <= 0 {
+	if next != nil && list.comparator.Compare(next.getKey(list.arena), key) < 0 {
 		return true
 	}
 	return false

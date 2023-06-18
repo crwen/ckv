@@ -1,8 +1,8 @@
 package utils
 
 import (
-	"SimpleKV/utils/codec"
-	"SimpleKV/utils/convert"
+	"ckv/utils/codec"
+	"ckv/utils/convert"
 	"github.com/pkg/errors"
 	"log"
 	"sync/atomic"

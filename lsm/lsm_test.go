@@ -1,8 +1,8 @@
 package lsm
 
 import (
-	"SimpleKV/utils"
-	"SimpleKV/utils/cmp"
+	"ckv/utils"
+	"ckv/utils/cmp"
 	"fmt"
 	"github.com/stretchr/testify/assert"
 	"os"

@@ -1,6 +1,6 @@
 package version
 
-import "SimpleKV/sstable"
+import "ckv/sstable"
 
 func (vs *VersionSet) GetIndex(fid uint64) *sstable.IndexBlock {
 	return vs.tableCache.GetIndex(fid)

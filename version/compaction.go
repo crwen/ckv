@@ -1,10 +1,10 @@
 package version
 
 import (
-	"SimpleKV/file"
-	"SimpleKV/sstable"
-	"SimpleKV/utils"
-	"SimpleKV/utils/errs"
+	"ckv/file"
+	"ckv/sstable"
+	"ckv/utils"
+	"ckv/utils/errs"
 	"log"
 	"math/rand"
 	"sort"

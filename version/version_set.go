@@ -1,12 +1,12 @@
 package version
 
 import (
-	"SimpleKV/cache"
-	"SimpleKV/sstable"
-	"SimpleKV/utils"
-	"SimpleKV/utils/convert"
-	"SimpleKV/utils/errs"
 	"bufio"
+	"ckv/cache"
+	"ckv/sstable"
+	"ckv/utils"
+	"ckv/utils/convert"
+	"ckv/utils/errs"
 	"io"
 	"os"
 	"path/filepath"

@@ -1,11 +1,11 @@
 package sstable
 
 import (
-	"SimpleKV/file"
-	"SimpleKV/utils"
-	"SimpleKV/utils/codec"
-	"SimpleKV/utils/convert"
-	"SimpleKV/utils/errs"
+	"ckv/file"
+	"ckv/utils"
+	"ckv/utils/codec"
+	"ckv/utils/convert"
+	"ckv/utils/errs"
 	"github.com/golang/protobuf/proto"
 	"github.com/pkg/errors"
 	"io"

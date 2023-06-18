@@ -1,8 +1,8 @@
 package version
 
 import (
-	"SimpleKV/sstable"
-	"SimpleKV/utils"
+	"ckv/sstable"
+	"ckv/utils"
 	"os"
 	"path/filepath"
 )

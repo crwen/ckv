@@ -1,13 +1,13 @@
 package lsm
 
 import (
-	"SimpleKV/file"
-	"SimpleKV/utils"
-	"SimpleKV/utils/codec"
-	"SimpleKV/utils/convert"
-	"SimpleKV/utils/errs"
 	"bufio"
 	"bytes"
+	"ckv/file"
+	"ckv/utils"
+	"ckv/utils/codec"
+	"ckv/utils/convert"
+	"ckv/utils/errs"
 	"io"
 	"os"
 	"sync"
@@ -36,6 +36,9 @@ type WalHeader struct {
 // OpenWalFile _
 func OpenWalFile(opt *file.Options) *WalFile {
 	omf, err := file.OpenMmapFile(opt.FileName, os.O_CREATE|os.O_RDWR, opt.MaxSz)
+	if err != nil {
+		panic(err)
+	}
 	wf := &WalFile{f: omf, lock: &sync.RWMutex{}, opt: opt}
 	wf.buf = &bytes.Buffer{}
 	wf.size = uint32(len(wf.f.Data))
@@ -53,7 +56,7 @@ func (wal *WalFile) Write(entry *utils.Entry) error {
 
 	h := WalHeader{}
 	h.keyLen = uint16(len(entry.Key))
-	h.ValueLen = uint16(len(entry.Key))
+	h.ValueLen = uint16(len(entry.Value))
 	// checksum + key len + value len + type = 4 + 2 + 2 + 1 = 9
 	total := h.keyLen + h.ValueLen + 9 + 8
 
@@ -115,11 +118,12 @@ func (wal *WalFile) Iterate(fn func(e *utils.Entry) error) (uint64, error) {
 		//value := data[9+h.keyLen : total]
 		value := b[h.keyLen+8 : h.keyLen+8+h.ValueLen]
 		//data = data[total:]
-		err := fn(&utils.Entry{Key: key, Value: value, Seq: seq})
 		buf = append(buf, b...)
 		if err := codec.VerifyU32Checksum(buf[4:], h.checksum); err != nil {
 			break
 		}
+
+		err := fn(&utils.Entry{Key: key, Value: value, Seq: seq})
 		if err != nil {
 			break
 		}

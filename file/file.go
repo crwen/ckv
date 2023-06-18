@@ -1,7 +1,7 @@
 package file
 
 import (
-	"SimpleKV/utils/errs"
+	"ckv/utils/errs"
 	"fmt"
 	"path"
 	"path/filepath"

@@ -1,10 +1,10 @@
 package lsm
 
 import (
-	"SimpleKV/sstable"
-	"SimpleKV/utils"
-	"SimpleKV/utils/cmp"
-	"SimpleKV/version"
+	"ckv/sstable"
+	"ckv/utils"
+	"ckv/utils/cmp"
+	"ckv/version"
 	"fmt"
 	"github.com/stretchr/testify/assert"
 	"testing"

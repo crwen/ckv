@@ -1,10 +1,11 @@
 package lsm
 
 import (
-	"SimpleKV/utils"
-	"SimpleKV/utils/cmp"
-	"SimpleKV/utils/convert"
-	"SimpleKV/utils/errs"
+	"ckv/utils"
+	"ckv/utils/cmp"
+	"ckv/utils/codec"
+	"ckv/utils/convert"
+	"ckv/utils/errs"
 	"fmt"
 	"path/filepath"
 	"sync/atomic"
@@ -89,19 +90,51 @@ func (mem *MemTable) Set(entry *utils.Entry) error {
 		}
 	}
 
+	//  ------------------------    ---------------------
+	// |  key_size | key | tag |   | value_size | value |
+	//  -----------------------    ---------------------
+	key_size := len(entry.Key)
+	// val_size := len(entry.Value)
+	internal_key_size := key_size + 8
+
+	encoded_len := codec.VarintLength(uint64(internal_key_size)) + internal_key_size
+
+	buf := make([]byte, encoded_len)
+
+	off := codec.EncodeVarint32(buf, uint32(internal_key_size))
+	copy(buf[off:], entry.Key)
+	off += len(entry.Key)
+
+	// codec.EncodeVarint64(buf[off:], (entry.Seq<<8)|0x1)
+	copy(buf[off:], convert.U64ToBytes(entry.Seq|0x1))
+	off += 8
+	mem.table.Add(buf, entry.Value)
+
 	// write MemTable
-	key, val := entry.Key, entry.Value
+	// key, val := entry.Key, entry.Value
 	//val = append(val, convert.U64ToBytes(entry.Seq|0x1)...)
-	key = append(convert.U64ToBytes(entry.Seq), key...)
-	mem.table.Add(key, val)
+	// key = append(convert.U64ToBytes(entry.Seq), key...)
+	// mem.table.Add(key, val)
 
 	return nil
 }
 
 func (mem *MemTable) Get(key []byte, seq uint64) (*utils.Entry, error) {
+	// codec.VarintLength(uint64(internal_key_size)) + internal_key_size
 
-	internalKey := append(convert.U64ToBytes(seq), key...)
-	v := mem.table.Search(internalKey)
+	internal_key_size := len(key) + 8
+	buf := make([]byte, codec.VarintLength(uint64(internal_key_size))+internal_key_size)
+	off := codec.EncodeVarint32(buf, uint32(internal_key_size))
+	copy(buf[off:], key)
+	off += len(key)
+	// codec.EncodeVarint64(buf[off:], (entry.Seq<<8)|0x1)
+	copy(buf[off:], convert.U64ToBytes(0|0x1))
+
+	// off := codec.EncodeVarint32(buf, codec.VarintLength(uint64(internal_key_size)))
+
+	// internalKey := append(convert.U64ToBytes(seq), key...)
+	//fmt.Println(string(buf))
+	v := mem.table.Search(buf)
 	if v == nil {
 		return nil, errs.ErrEmptyKey
 	}

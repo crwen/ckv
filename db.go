@@ -1,9 +1,9 @@
 package SimpleKV
 
 import (
-	"SimpleKV/lsm"
-	"SimpleKV/utils"
-	"SimpleKV/utils/errs"
+	"ckv/lsm"
+	"ckv/utils"
+	"ckv/utils/errs"
 	"sync"
 )
 

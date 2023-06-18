@@ -1,7 +1,7 @@
 package cache
 
 import (
-	"SimpleKV/utils"
+	"ckv/utils"
 	"fmt"
 	"math/rand"
 	"testing"
