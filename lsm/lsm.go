@@ -126,6 +126,7 @@ func (lsm *LSM) WriteLevel0Table(immutable *MemTable) (err error) {
 	builder := sstable.NewTableBuiler(lsm.option)
 	//iter := immutable.table.NewIterator()
 	iter := immutable.NewMemTableIterator()
+	defer iter.Close()
 	var entry *utils.Entry
 	for iter.Rewind(); iter.Valid(); iter.Next() {
 		entry = iter.Item().Entry()

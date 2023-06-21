@@ -18,7 +18,7 @@ type InternalComparator struct {
 }
 
 func (cmp InternalComparator) Compare(a, b []byte) int {
-	return cmp.userComparator.Compare(a, b)
+	return cmp.userComparator.Compare(parseKey(a), parseKey(b))
 }
 
 func newInternalComparator(comparator cmp.Comparator) InternalComparator {
@@ -61,8 +61,8 @@ func NewMemTable(comparator cmp.Comparator, wal *WalFile) *MemTable {
 	//	MaxSz:    int(lsm.option.MemTableSize),
 	//}
 	m := &MemTable{
-		//table: utils.NewSkipListWithComparator(arena, newInternalComparator(comparator)),
-		table:      utils.NewSkipListWithComparator(arena, comparator),
+		table: utils.NewSkipListWithComparator(arena, newInternalComparator(comparator)),
+		//table:      utils.NewSkipListWithComparator(arena, comparator),
 		wal:        wal,
 		comparator: comparator,
 		state:      NORMAL,
@@ -79,11 +79,21 @@ func (mem *MemTable) Set(entry *utils.Entry) error {
 			return err
 		}
 	}
-
 	//  ------------------------    ---------------------
 	// |  key_size | key | tag |   | value_size | value |
 	//  -----------------------    ---------------------
-	key_size := len(entry.Key)
+	mem.table.Add(buildInternalKey(entry.Key, entry.Seq), entry.Value)
+
+	return nil
+}
+
+// buildInterKey build internal key
+//  ------------------------
+// |  key_size | key | tag |
+//  -----------------------
+func buildInternalKey(key []byte, seq uint64) []byte {
+
+	key_size := len(key)
 	// val_size := len(entry.Value)
 	internal_key_size := key_size + 8
 
@@ -92,21 +102,12 @@ func (mem *MemTable) Set(entry *utils.Entry) error {
 	buf := make([]byte, encoded_len)
 
 	off := codec.EncodeVarint32(buf, uint32(internal_key_size))
-	copy(buf[off:], entry.Key)
-	off += len(entry.Key)
+	copy(buf[off:], key)
+	off += len(key)
 
-	//codec.EncodeVarint64(buf[off:], (entry.Seq<<8)|0x1)
-	copy(buf[off:], convert.U64ToBytes(entry.Seq<<8|0x1))
+	copy(buf[off:], convert.U64ToBytes(seq<<8|0x1))
 	off += 8
-	mem.table.Add(buf, entry.Value)
-
-	// write MemTable
-	// key, val := entry.Key, entry.Value
-	//val = append(val, convert.U64ToBytes(entry.Seq|0x1)...)
-	// key = append(convert.U64ToBytes(entry.Seq), key...)
-	// mem.table.Add(key, val)
-
-	return nil
+	return buf
 }
 
 func (mem *MemTable) Get(key []byte, seq uint64) (*utils.Entry, error) {
@@ -170,7 +171,10 @@ func mtFilePath(dir string, fid uint64) string {
 
 func (m *MemTable) recoveryMemTable(opt *utils.Options) func(*utils.Entry) error {
 	return func(e *utils.Entry) error {
-		return m.table.Add(e.Key, e.Value)
+		//  ------------------------    ---------------------
+		// |  key_size | key | tag |   | value_size | value |
+		//  -----------------------    ---------------------
+		return m.table.Add(buildInternalKey(e.Key, e.Seq), e.Value)
 	}
 }
 
