@@ -18,18 +18,7 @@ type InternalComparator struct {
 }
 
 func (cmp InternalComparator) Compare(a, b []byte) int {
-	res := cmp.userComparator.Compare(getKey(a), getKey(b))
-	if res == 0 {
-		seqa, seqb := getSeq(a), getSeq(b)
-		if seqa > seqb {
-			res = -1
-		} else if seqa < seqb {
-			res = 1
-		} else {
-			res = 0
-		}
-	}
-	return res
+	return cmp.userComparator.Compare(a, b)
 }
 
 func newInternalComparator(comparator cmp.Comparator) InternalComparator {
@@ -51,11 +40,11 @@ func getSeq(data []byte) uint64 {
 }
 
 type MemTable struct {
-	table *Table
-	arena *utils.Arena
-	wal   *WalFile
-	ref   int32
-	state int32
+	table      *Table
+	comparator cmp.Comparator
+	wal        *WalFile
+	ref        int32
+	state      int32
 }
 
 // NewMemtable _
@@ -72,10 +61,11 @@ func NewMemTable(comparator cmp.Comparator, wal *WalFile) *MemTable {
 	//	MaxSz:    int(lsm.option.MemTableSize),
 	//}
 	m := &MemTable{
-		table: utils.NewSkipListWithComparator(arena, newInternalComparator(comparator)),
-		wal:   wal,
-		arena: arena,
-		state: NORMAL,
+		//table: utils.NewSkipListWithComparator(arena, newInternalComparator(comparator)),
+		table:      utils.NewSkipListWithComparator(arena, comparator),
+		wal:        wal,
+		comparator: comparator,
+		state:      NORMAL,
 	}
 	m.IncrRef()
 	return m
@@ -105,8 +95,8 @@ func (mem *MemTable) Set(entry *utils.Entry) error {
 	copy(buf[off:], entry.Key)
 	off += len(entry.Key)
 
-	// codec.EncodeVarint64(buf[off:], (entry.Seq<<8)|0x1)
-	copy(buf[off:], convert.U64ToBytes(entry.Seq|0x1))
+	//codec.EncodeVarint64(buf[off:], (entry.Seq<<8)|0x1)
+	copy(buf[off:], convert.U64ToBytes(entry.Seq<<8|0x1))
 	off += 8
 	mem.table.Add(buf, entry.Value)
 
@@ -122,34 +112,41 @@ func (mem *MemTable) Set(entry *utils.Entry) error {
 func (mem *MemTable) Get(key []byte, seq uint64) (*utils.Entry, error) {
 	// codec.VarintLength(uint64(internal_key_size)) + internal_key_size
 
+	var (
+		//userKeyOff int
+		tagOff int
+	)
 	internal_key_size := len(key) + 8
 	buf := make([]byte, codec.VarintLength(uint64(internal_key_size))+internal_key_size)
 	off := codec.EncodeVarint32(buf, uint32(internal_key_size))
+	//userKeyOff = off
+
 	copy(buf[off:], key)
 	off += len(key)
-	// codec.EncodeVarint64(buf[off:], (entry.Seq<<8)|0x1)
-	copy(buf[off:], convert.U64ToBytes(0|0x1))
+	tagOff = off
+	//codec.EncodeVarint64(buf[off:], (seq<<8)|0x1)
+	//copy(buf[off:], convert.U64ToBytes(0|0x1))
 
 	// off := codec.EncodeVarint32(buf, codec.VarintLength(uint64(internal_key_size)))
 
 	// internalKey := append(convert.U64ToBytes(seq), key...)
 	//fmt.Println(string(buf))
-	v := mem.table.Search(buf)
-	if v == nil {
-		return nil, errs.ErrEmptyKey
+	//v := mem.table.Search(buf)
+	it := mem.table.NewIterator()
+	defer it.Close()
+	it.Seek(buf)
+	if it.Valid() && len(it.Key()) > 8 {
+		if mem.comparator.Compare(buf[:tagOff], it.Key()[:len(it.Key())-8]) != 0 {
+			return nil, errs.ErrKeyNotFound
+		}
+		v := &utils.Entry{
+			Key:   parseKey(it.Key()),
+			Value: it.Value(),
+			Seq:   parseSeq(it.Key()),
+		}
+		return v, nil
 	}
-	//vs := utils.DecodeValue(v.Value)
-	//e := &utils.Entry{
-	//	Key:   key,
-	//	Value: vs.Value,
-	//	Seq:   vs.Seq,
-	//}
-	e := &utils.Entry{
-		Key:   key,
-		Value: v.Value,
-		Seq:   v.Seq,
-	}
-	return e, nil
+	return nil, errs.ErrKeyNotFound
 }
 
 func (m *MemTable) Size() int64 {
@@ -163,6 +160,7 @@ func (m *MemTable) close() error {
 		return err
 	}
 	m.table.Close()
+	m.table = nil
 	return nil
 }
 
@@ -212,7 +210,12 @@ func (m MemTableIterator) Rewind() {
 }
 
 func (m MemTableIterator) Item() utils.Item {
-	return m.list.Item()
+	item := m.list.Item()
+	entry := item.Entry()
+
+	entry.Key = parseKey(entry.Key)
+	entry.Seq = parseSeq(entry.Key)
+	return entry
 }
 
 func (m MemTableIterator) Close() error {
@@ -223,4 +226,14 @@ func (m MemTableIterator) Close() error {
 
 func (m MemTableIterator) Seek(key []byte) {
 	m.list.Seek(key)
+}
+
+func parseKey(internalKey []byte) []byte {
+	keySz := codec.DecodeVarint32(internalKey[0:4])
+	off := codec.VarintLength(uint64(keySz))
+	return internalKey[off : len(internalKey)-8]
+}
+
+func parseSeq(internalKey []byte) uint64 {
+	return convert.BytesToU64(internalKey[len(internalKey)-8:]) >> 8
 }

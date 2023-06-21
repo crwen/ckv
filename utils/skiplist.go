@@ -312,7 +312,7 @@ func (iter *SkipListIterator) Close() error {
 
 func (iter *SkipListIterator) Seek(key []byte) {
 	iter.Rewind()
-	iter.list.FindGreaterOrEqual(key, nil)
+	iter.node = iter.list.FindGreaterOrEqual(key, nil)
 	//iter.Next()
 	//for n := iter.Item(); n != nil && bytes.Compare(n.Entry().Key, key) != 0; {
 	//	n = iter.Item()
