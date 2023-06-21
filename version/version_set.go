@@ -241,7 +241,7 @@ func (vs *VersionSet) searchLNSST(key []byte) (*utils.Entry, error) {
 	return nil, errs.ErrKeyNotFound
 }
 
-func (vs *VersionSet) Increase(delta uint64) uint64 {
+func (vs *VersionSet) IncreaseNextFileNumber(delta uint64) uint64 {
 
 	newFid := atomic.AddUint64(&(vs.NextFileNumber), delta)
 	return newFid
