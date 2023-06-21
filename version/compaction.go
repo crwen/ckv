@@ -100,8 +100,8 @@ func (vs *VersionSet) compact(id int) {
 	}
 	iter.Close()
 
-	vs.Increase(1)
-	sstName := file.FileNameSSTable(vs.current.opt.WorkDir, vs.NextFileNumber)
+	newFid := vs.IncreaseNextFileNumber(1)
+	sstName := file.FileNameSSTable(vs.current.opt.WorkDir, newFid)
 	t, err := builer.Flush(sstName)
 	t.MaxKey = entry.Key
 	if err != nil {

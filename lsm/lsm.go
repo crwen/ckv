@@ -63,7 +63,7 @@ func NewLSM(opt *utils.Options) *LSM {
 func (lsm *LSM) IncreaseFid(delta uint64) uint64 {
 	//newFid := atomic.AddUint64(&(lsm.maxFID), delta)
 
-	return lsm.verSet.Increase(delta)
+	return lsm.verSet.IncreaseNextFileNumber(delta)
 }
 
 // Set _
@@ -242,7 +242,6 @@ func (lsm *LSM) openMemTable(fid uint64) (*MemTable, error) {
 	arena := utils.NewArena()
 	mt := &MemTable{
 		table: utils.NewSkipListWithComparator(arena, lsm.option.Comparable),
-		arena: arena,
 	}
 	mt.wal = OpenWalFile(fileOpt)
 	//oldSeq := lsm.seq
