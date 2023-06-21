@@ -176,12 +176,16 @@ func Benchmark_ConcurrentBasic(b *testing.B) {
 	key := func(i int) []byte {
 		return []byte(fmt.Sprintf("%05d", i))
 	}
-	for i := 0; i < n; i++ {
+
+	var step = 50
+	for i := 0; i < n; i += step {
 		wg.Add(1)
 		go func(i int) {
 			defer wg.Done()
-			e := NewEntry(key(i), key(i))
-			assert.Nil(b, l.Add(e.Key, e.Value))
+			for j := 0; j < step; j++ {
+				e := NewEntry(key(i+j), key(i+j))
+				assert.Nil(b, l.Add(e.Key, e.Value))
+			}
 		}(i)
 	}
 	wg.Wait()

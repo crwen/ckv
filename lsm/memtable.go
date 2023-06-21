@@ -193,7 +193,7 @@ type MemTableIterator struct {
 }
 
 func (m *MemTable) NewMemTableIterator() *MemTableIterator {
-	//m.IncrRef()
+	m.IncrRef()
 	return &MemTableIterator{list: m.table.NewIterator(), mem: m}
 }
 
@@ -213,14 +213,14 @@ func (m MemTableIterator) Item() utils.Item {
 	item := m.list.Item()
 	entry := item.Entry()
 
-	entry.Key = parseKey(entry.Key)
 	entry.Seq = parseSeq(entry.Key)
+	entry.Key = parseKey(entry.Key)
 	return entry
 }
 
 func (m MemTableIterator) Close() error {
 	//m.list.Close()
-	//m.mem.DecrRef()
+	m.mem.DecrRef()
 	return nil
 }
 
