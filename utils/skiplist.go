@@ -264,6 +264,7 @@ type SkipListIterator struct {
 func (list *SkipList) NewIterator() *SkipListIterator {
 	// increase ref first
 	//list.IncrRef()
+	list.lock.RLock()
 	return &SkipListIterator{
 		list: list,
 		node: list.head,
@@ -307,6 +308,7 @@ func (iter *SkipListIterator) Close() error {
 	// decrease the ref of skip list
 	//iter.list.DecrRef()
 	//iter.list.Close()
+	iter.list.lock.RUnlock()
 	return nil
 }
 

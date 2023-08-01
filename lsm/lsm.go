@@ -98,13 +98,13 @@ func (lsm *LSM) Get(key []byte) (*utils.Entry, error) {
 		err   error
 	)
 	// serach from memtable first
-	if entry, err = lsm.memTable.Get(key, lsm.seq); entry != nil && entry.Value != nil {
+	if entry, err = lsm.memTable.Get(key, 0); entry != nil && entry.Value != nil {
 		return entry, err
 	}
 
 	// search from immutable, beginning at the newest immutable
 	for i := len(lsm.immutables) - 1; i >= 0; i-- {
-		if entry, err = lsm.immutables[i].Get(key, lsm.seq); entry != nil && entry.Value != nil {
+		if entry, err = lsm.immutables[i].Get(key, 0); entry != nil && entry.Value != nil {
 			return entry, err
 		}
 	}

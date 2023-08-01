@@ -47,11 +47,13 @@ func TestLSM_Set(t *testing.T) {
 
 func TestLSM_CRUD(t *testing.T) {
 	clearDir()
-	comparable := cmp.IntComparator{}
+	comparable := cmp.ByteComparator{}
 	opt.Comparable = comparable
 	lsm := NewLSM(opt)
 
-	for i := 0; i < 500; i++ {
+	n := 2000
+
+	for i := 0; i < n; i++ {
 		e := &utils.Entry{
 			Key:   []byte(fmt.Sprintf("%d", i)),
 			Value: []byte(fmt.Sprintf("%d", i)),
@@ -66,16 +68,18 @@ func TestLSM_CRUD(t *testing.T) {
 	//	lsm.Set(e)
 	//}
 
-	for i := 0; i < 500; i++ {
+	for i := 0; i < n; i++ {
 		e := &utils.Entry{
 			Key:   []byte(fmt.Sprintf("%d", i)),
 			Value: []byte(fmt.Sprintf("%d", i)),
 		}
+
 		v, err := lsm.Get(e.Key)
 		if err != nil {
-			panic(err)
+			fmt.Println(e.Key)
 		}
-		assert.Equal(t, e.Value, v.Value)
+		assert.Nil(t, err, string(e.Key))
+		assert.Equal(t, e.Value, v.Value, string(e.Key))
 	}
 
 }
@@ -112,9 +116,8 @@ func TestLSM_C(t *testing.T) {
 			Value: []byte(fmt.Sprintf("%d", i)),
 		}
 		v, err := lsm.Get(e.Key)
-		if err != nil {
-			panic(err)
-		}
+		assert.Nil(t, err)
+		assert.NotNil(t, v, string(e.Key))
 		assert.Equal(t, e.Value, v.Value)
 	}
 }
@@ -165,15 +168,13 @@ func TestLWAL_Read(t *testing.T) {
 		if err != nil {
 			panic(err)
 		}
-		fmt.Println(string(v.Key), string(v.Value), v.Seq)
 		assert.Equal(t, e.Value, v.Value)
 	}
 	v, err := lsm.Get(ee.Key)
 	if err != nil {
 		panic(err)
 	}
-	fmt.Println(string(v.Key), string(v.Value), v.Seq)
-
+	assert.Equal(t, ee.Value, v.Value)
 }
 
 func TestCompactiont(t *testing.T) {
@@ -189,6 +190,11 @@ func TestCompactiont(t *testing.T) {
 			Value: []byte(fmt.Sprintf("%0128d", i)),
 		}
 		lsm.Set(e)
+		v, err := lsm.Get(e.Key)
+		if err != nil {
+			panic(err)
+		}
+		assert.Equal(t, e.Value, v.Value)
 	}
 	for i := 0; i < 10000; i++ {
 		e := &utils.Entry{
@@ -196,6 +202,11 @@ func TestCompactiont(t *testing.T) {
 			Value: []byte(fmt.Sprintf("%0128d", i+1)),
 		}
 		lsm.Set(e)
+		v, err := lsm.Get(e.Key)
+		if err != nil {
+			panic(err)
+		}
+		assert.Equal(t, e.Value, v.Value)
 	}
 
 }
