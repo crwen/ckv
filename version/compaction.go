@@ -79,6 +79,7 @@ func (vs *VersionSet) compact(id int) {
 	}
 	log.Println("Compact begin")
 	defer log.Println("Compaction end")
+
 	var iters []sstable.TableIterator
 	for _, meta := range c.base {
 		id := meta.id
@@ -91,6 +92,7 @@ func (vs *VersionSet) compact(id int) {
 		//t := sstable.OpenTable(vs.current.opt, id)
 		iters = append(iters, t.NewIterator(vs.current.opt))
 	}
+
 	iter := NewMergeIterator(iters, vs.current.opt.Comparable)
 	builer := sstable.NewTableBuiler(vs.current.opt)
 	var entry *utils.Entry
@@ -145,6 +147,7 @@ func (vs *VersionSet) compact(id int) {
 		t.DecrRef()
 
 	}
+
 	log.Printf("compact from level %d to level %d. create %s. delete %d files \n",
 		c.baseLevel, c.targetLevel, sstName, len(ve.deletes))
 	//for _, me := range ve.deletes {
@@ -153,6 +156,7 @@ func (vs *VersionSet) compact(id int) {
 	//log.Println()
 }
 
+// pickCompaction method    pick sstables to compact
 func (vs *VersionSet) pickCompaction() *Compaction {
 	var c Compaction
 	c.baseLevel = vs.current.pickCompactionLevel()
@@ -171,13 +175,17 @@ func (vs *VersionSet) pickCompaction() *Compaction {
 	cmp := vs.current.opt.Comparable
 	if c.baseLevel == 0 {
 		c.base = append(c.base, vs.current.files[0]...)
+		utils.AssertTrue(len(c.base) > 0)
+		if len(c.base) > 0 {
+			smallest, largest = c.base[0].smallest, c.base[0].largest
+		}
 		for i := 0; i < len(c.base); i++ {
 			f := c.base[i]
 			if cmp.Compare(f.largest, largest) > 0 {
 				largest = f.largest
 			}
 			if cmp.Compare(f.smallest, smallest) < 0 {
-				smallest = smallest
+				smallest = f.smallest
 			}
 		}
 	} else {
@@ -195,7 +203,7 @@ func (vs *VersionSet) pickCompaction() *Compaction {
 		for i := 0; i < len(vs.current.files[c.baseLevel]); i++ {
 			f := vs.current.files[c.baseLevel][i]
 			// if there are overlap key, append to base
-			if cmp.Compare(f.smallest, largest) >= 0 {
+			if cmp.Compare(f.smallest, largest) <= 0 {
 				c.base = append(c.base, f)
 				largest = f.largest
 			}

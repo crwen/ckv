@@ -10,7 +10,7 @@ import (
 )
 
 const (
-	kBlockSize = 4096
+	kBlockSize uint32 = 4096
 
 	offsetSize = int(unsafe.Sizeof(uint32(0)))
 
@@ -34,8 +34,8 @@ func NewArena() *Arena {
 	// Don't store data at position 0 in order to reserve offset=0 as a kind
 	// of nil pointer.
 	arena := &Arena{
-		//buf: make([]byte, 3*kBlockSize),
-		buf: make([]byte, 1<<12),
+		buf: make([]byte, 3*kBlockSize),
+		//buf: make([]byte, kBlockSize),
 		//remaining: kBlockSize,
 	}
 	return arena
@@ -45,12 +45,10 @@ func (s *Arena) Allocate(bytes uint32) uint32 {
 	offset := atomic.AddUint32(&s.offset, bytes)
 
 	if int(offset) > len(s.buf)-MaxNodeSize {
-		growBy := uint32(len(s.buf))
-		if growBy > kBlockSize {
-			growBy = kBlockSize
-		}
+		growBy := kBlockSize
+
 		if growBy < bytes {
-			growBy = bytes
+			growBy = (bytes/kBlockSize + 1) * kBlockSize
 		}
 		//buf := make([]byte, growBy)
 		//s.buf = append(s.buf, buf...)
@@ -59,39 +57,6 @@ func (s *Arena) Allocate(bytes uint32) uint32 {
 		s.buf = newBuf
 	}
 	return offset - bytes
-	//if bytes <= s.remaining {
-	//	offset := atomic.AddUint32(&s.offset, bytes)
-	//	s.remaining -= bytes
-	//	return offset - bytes
-	//}
-	//
-	//return s.allocateFallback(bytes)
-}
-
-//func (s *Arena) allocateFallback(bytes uint32) uint32 {
-//	if bytes > kBlockSize/4 {
-//		// to avoid wasting too match space in leftover bytes
-//		offset := s.allocateNewBlock(bytes)
-//		return offset
-//	}
-//	s.offset = s.allocateNewBlock(kBlockSize)
-//	s.remaining = kBlockSize
-//
-//	result := s.offset
-//	s.offset += bytes
-//	s.remaining -= bytes
-//	return result
-//}
-
-//func (s *Arena) allocateNewBlock(blockBytes uint32) uint32 {
-//	buf := make([]byte, blockBytes)
-//	s.buf = append(s.buf, buf...)
-//	atomic.AddUint64(&s.usage, uint64(blockBytes)+uint64(nodeAlign))
-//	return uint32(s.usage - uint64(len(buf)))
-//}
-
-func (s *Arena) allocateAligned(bytes uint32) {
-
 }
 
 func (s *Arena) size() int64 {
@@ -112,13 +77,6 @@ func (s *Arena) putNode(height int) uint32 {
 	m := (n + uint32(nodeAlign)) & ^uint32(nodeAlign)
 	return m
 }
-
-//func (s *Arena) putVal(v ValueStruct) uint32 {
-//	l := uint32(v.EncodedSize())
-//	offset := s.Allocate(l)
-//	v.EncodeValue(s.buf[offset:])
-//	return offset
-//}
 
 func (s *Arena) putVal(v []byte) uint32 {
 	l := uint32(len(v))
@@ -223,18 +181,6 @@ func (s *Arena) GetSeq(offset uint32) uint64 {
 	buf := s.buf[offset:]
 	return codec.DecodeVarint64(buf[:])
 }
-
-// getKey returns byte slice at offset.
-//func (s *Arena) getKey(offset uint32, size uint16) []byte {
-//	return s.buf[offset : offset+uint32(size)]
-//}
-//
-//// getVal returns byte slice at offset. The given size should be just the value
-//// size and should NOT include the meta bytes.
-//func (s *Arena) getVal(offset uint32, size uint32) (ret ValueStruct) {
-//	ret.DecodeValue(s.buf[offset : offset+size])
-//	return
-//}
 
 func AssertTrue(b bool) {
 	if !b {

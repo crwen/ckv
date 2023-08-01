@@ -86,6 +86,10 @@ func (v *Version) deleteFile(level uint16, meta *FileMetaData) {
 	}
 }
 
+// pickCompactionLevel method    pick level that has the highest score
+// if best score < 1 , if score > 0.6, try to compact highest level, if score
+// for L0 score = len(files) / L0_CompactionTrigger
+// for Li score = totalFileSize / maxBytesForLevel
 func (v *Version) pickCompactionLevel() int {
 
 	baseLevel := 0

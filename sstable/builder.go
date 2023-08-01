@@ -8,9 +8,10 @@ import (
 	"ckv/utils/errs"
 	"errors"
 	"fmt"
-	"github.com/golang/protobuf/proto"
 	"math"
 	"os"
+
+	"github.com/golang/protobuf/proto"
 )
 
 type tableBuilder struct {
@@ -158,6 +159,7 @@ func (tb *tableBuilder) keyDiff(newKey []byte) []byte {
 	return newKey[i:]
 }
 
+// tryFinishBlock method    return whether should flush this block
 func (tb *tableBuilder) tryFinishBlock(e *utils.Entry) bool {
 	if tb.curBlock == nil {
 		return true
@@ -183,9 +185,10 @@ func (tb *tableBuilder) tryFinishBlock(e *utils.Entry) bool {
 }
 
 // finishBlock write other info to Block, e.g. entry offsets, checksum
-//  +------------------------ --------------------------------------+
-//  |  kv_data | entryOffsets | entryOff len | checksum | check len |
-//  +---------------------------------------------------------------+
+//
+//	+------------------------ --------------------------------------+
+//	|  kv_data | entryOffsets | entryOff len | checksum | check len |
+//	+---------------------------------------------------------------+
 func (tb *tableBuilder) finishBlock() {
 	if tb.curBlock == nil || len(tb.curBlock.EntryOffsets) == 0 {
 		return

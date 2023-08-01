@@ -198,7 +198,7 @@ func (vs *VersionSet) Get(key []byte) (*utils.Entry, error) {
 	if entry, err := vs.searchLNSST(key); err == nil && entry != nil {
 		return entry, nil
 	}
-	return nil, nil
+	return &utils.Entry{Key: key, Value: nil}, nil
 }
 
 func (vs *VersionSet) searchL0SST(key []byte) (*utils.Entry, error) {
