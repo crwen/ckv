@@ -113,16 +113,23 @@ func (vs *VersionSet) compact(id int) {
 	ve := NewVersionEdit()
 	ve.RecordAddFileMeta(c.targetLevel, t)
 
+	mergeFids := make([]uint64, 0)
 	for _, meta := range c.base {
 		id := meta.id
 		t := vs.FindTable(id)
 		ve.RecordDeleteFileMeta(c.baseLevel, t)
+		mergeFids = append(mergeFids, id)
 	}
 	for _, meta := range c.target {
 		id := meta.id
 		t := vs.FindTable(id)
 		ve.RecordDeleteFileMeta(c.targetLevel, t)
+		mergeFids = append(mergeFids, id)
 	}
+
+	//TODO: write vgroup to manifest
+	vs.info.MergeVLogGroup(mergeFids, newFid)
+
 	vs.LogAndApply(ve)
 	vs.AddFileMeta(c.targetLevel, t)
 

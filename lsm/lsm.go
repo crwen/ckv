@@ -40,7 +40,6 @@ type LSM struct {
 	cond                  *sync.Cond
 	bgCompactionScheduled bool
 	compactState          *version.CompactStatus
-	info                  *vlog.Statistic
 }
 
 // NewLSM _
@@ -50,7 +49,7 @@ func NewLSM(opt *utils.Options) *LSM {
 	} else {
 		opt.Comparable = cmp.ByteComparator{}
 	}
-	lsm := &LSM{option: opt, lock: &sync.RWMutex{}, info: vlog.NewStatistic()}
+	lsm := &LSM{option: opt, lock: &sync.RWMutex{}}
 	lsm.cond = sync.NewCond(lsm.lock)
 	lsm.verSet, _ = version.Open(lsm.option)
 	//lsm.compactState = version.NewCompactStatus(lsm.option)
@@ -58,7 +57,7 @@ func NewLSM(opt *utils.Options) *LSM {
 	// recovery
 	lsm.memTable, lsm.immutables = lsm.recovery()
 	//lsm.memTable = lsm.NewMemTable()
-	//go lsm.verSet.RunCompact()
+	go lsm.verSet.RunCompact()
 	return lsm
 }
 
@@ -145,7 +144,7 @@ func (lsm *LSM) WriteLevel0Table(immutable *MemTable) (err error) {
 	//level := 0
 	level := lsm.verSet.PickLevelForMemTableOutput(t.MinKey, t.MaxKey)
 
-	lsm.info.AddNewVLogGroup(fid)
+	lsm.verSet.AddNewVLogGroup(fid)
 
 	// TODO update manifest
 	ve := version.NewVersionEdit()

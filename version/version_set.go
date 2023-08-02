@@ -7,6 +7,7 @@ import (
 	"ckv/utils"
 	"ckv/utils/convert"
 	"ckv/utils/errs"
+	"ckv/vlog"
 	"io"
 	"os"
 	"path/filepath"
@@ -28,6 +29,7 @@ type VersionSet struct {
 	head       *Version
 	current    *Version
 	tableCache *cache.Cache
+	info       *vlog.Statistic
 	lock       sync.RWMutex
 }
 
@@ -61,7 +63,7 @@ func NewVersionSet(opt *utils.Options) *VersionSet {
 	vs.current = current
 	vs.head = &Version{}
 	vs.tableCache = cache.NewCache(100, 100)
-
+	vs.info = vlog.NewStatistic()
 	return vs
 }
 
@@ -245,6 +247,10 @@ func (vs *VersionSet) IncreaseNextFileNumber(delta uint64) uint64 {
 
 	newFid := atomic.AddUint64(&(vs.NextFileNumber), delta)
 	return newFid
+}
+
+func (vs *VersionSet) AddNewVLogGroup(fid uint64) {
+	vs.info.AddNewVLogGroup(fid)
 }
 
 //func (vs *VersionSet) Get(key []byte) (*utils.Entry, error) {
