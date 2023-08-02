@@ -1,6 +1,7 @@
 package codec
 
 import (
+	"bufio"
 	"ckv/utils/convert"
 	"ckv/utils/errs"
 	"encoding/binary"
@@ -35,15 +36,15 @@ func EncodeVarint32(buf []byte, v uint32) int {
 	} else if v < (1 << 28) {
 		buf[0] = byte(v | B)
 		buf[1] = byte((v >> 7) | B)
-		buf[3] = byte((v >> 14) | B)
-		buf[4] = byte(v >> 21)
+		buf[2] = byte((v >> 14) | B)
+		buf[3] = byte(v >> 21)
 		return 4
 	} else {
 		buf[0] = byte(v | B)
 		buf[1] = byte((v >> 7) | B)
-		buf[3] = byte((v >> 14) | B)
-		buf[4] = byte((v >> 21) | B)
-		buf[5] = byte(v >> 28)
+		buf[2] = byte((v >> 14) | B)
+		buf[3] = byte((v >> 21) | B)
+		buf[4] = byte(v >> 28)
 		return 5
 	}
 }
@@ -154,4 +155,22 @@ func ParseKey(key []byte) []byte {
 	}
 
 	return key[:len(key)-8]
+}
+
+func ReadUVarint32(reader *bufio.Reader) (uint32, error) {
+	var val uint32 = 0
+	var s int = 0
+
+	for {
+		b, err := reader.ReadByte()
+		if err != nil {
+			return 0, err
+		}
+		val |= uint32(b&0x7f) << s
+		s += 7
+		if (b & 128) == 0 {
+			return val, nil
+		}
+	}
+	return val, nil
 }
