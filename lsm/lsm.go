@@ -7,6 +7,7 @@ import (
 	"ckv/utils/cmp"
 	"ckv/utils/errs"
 	"ckv/version"
+	"ckv/vlog"
 	"io/ioutil"
 	"os"
 	"sort"
@@ -39,6 +40,7 @@ type LSM struct {
 	cond                  *sync.Cond
 	bgCompactionScheduled bool
 	compactState          *version.CompactStatus
+	info                  *vlog.Statistic
 }
 
 // NewLSM _
@@ -48,15 +50,15 @@ func NewLSM(opt *utils.Options) *LSM {
 	} else {
 		opt.Comparable = cmp.ByteComparator{}
 	}
-	lsm := &LSM{option: opt, lock: &sync.RWMutex{}}
+	lsm := &LSM{option: opt, lock: &sync.RWMutex{}, info: vlog.NewStatistic()}
 	lsm.cond = sync.NewCond(lsm.lock)
 	lsm.verSet, _ = version.Open(lsm.option)
-	lsm.compactState = version.NewCompactStatus(lsm.option)
+	//lsm.compactState = version.NewCompactStatus(lsm.option)
 	//lsm.lm = lsm.newLevelManager()
 	// recovery
 	lsm.memTable, lsm.immutables = lsm.recovery()
 	//lsm.memTable = lsm.NewMemTable()
-	go lsm.verSet.RunCompact()
+	//go lsm.verSet.RunCompact()
 	return lsm
 }
 
@@ -143,6 +145,8 @@ func (lsm *LSM) WriteLevel0Table(immutable *MemTable) (err error) {
 	//level := 0
 	level := lsm.verSet.PickLevelForMemTableOutput(t.MinKey, t.MaxKey)
 
+	lsm.info.AddNewVLogGroup(fid)
+
 	// TODO update manifest
 	ve := version.NewVersionEdit()
 	ve.RecordAddFileMeta(level, t)
@@ -167,7 +171,8 @@ func (lsm *LSM) Rotate() {
 			lsm.cond.Wait()
 		} else {
 			lsm.immutables = append(lsm.immutables, lsm.memTable)
-			lsm.memTable = NewMemTable(lsm.option.Comparable, lsm.openWal())
+			wal := lsm.openWal()
+			lsm.memTable = NewMemTable(lsm.option.Comparable, wal, lsm.openVLog(wal.Fid()))
 			lsm.maybeScheduleCompaction()
 		}
 	}
@@ -216,8 +221,8 @@ func (lsm *LSM) recovery() (*MemTable, []*MemTable) {
 		lsm.WriteLevel0Table(imm)
 	}
 	lsm.immutables = lsm.immutables[:0]
-
-	return NewMemTable(lsm.option.Comparable, lsm.openWal()), imms[:0]
+	wal := lsm.openWal()
+	return NewMemTable(lsm.option.Comparable, wal, lsm.openVLog(wal.Fid())), imms[:0]
 }
 
 func (lsm *LSM) openWal() *WalFile {
@@ -230,6 +235,17 @@ func (lsm *LSM) openWal() *WalFile {
 		MaxSz:    int(lsm.option.MemTableSize),
 	}
 	return OpenWalFile(fileOpt)
+}
+
+func (lsm *LSM) openVLog(fid uint64) *vlog.VLogFile {
+	fileOpt := &file.Options{
+		FID:      fid,
+		FileName: mtvFilePath(lsm.option.WorkDir, fid),
+		Dir:      lsm.option.WorkDir,
+		Flag:     os.O_CREATE | os.O_RDWR,
+		MaxSz:    int(lsm.option.MemTableSize),
+	}
+	return vlog.OpenVLogFile(fileOpt)
 }
 
 func (lsm *LSM) openMemTable(fid uint64) (*MemTable, error) {

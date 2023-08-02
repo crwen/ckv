@@ -6,6 +6,7 @@ import (
 	"ckv/utils/codec"
 	"ckv/utils/convert"
 	"ckv/utils/errs"
+	"ckv/vlog"
 	"fmt"
 	"path/filepath"
 	"sync/atomic"
@@ -20,8 +21,8 @@ type InternalComparator struct {
 func (cmp InternalComparator) Compare(a, b []byte) int {
 	res := cmp.userComparator.Compare(parseKey(a), parseKey(b))
 	if res == 0 {
-		anum := convert.BytesToU64(a[len(a)-8:])
-		bnum := convert.BytesToU64(b[len(b)-8:])
+		anum := convert.BytesToU64(a[len(a)-8:]) >> 8
+		bnum := convert.BytesToU64(b[len(b)-8:]) >> 8
 		if anum > bnum {
 			return -1
 		} else if anum < bnum {
@@ -60,12 +61,14 @@ type MemTable struct {
 	table      *Table
 	comparator cmp.Comparator
 	wal        *WalFile
+	vlog       *vlog.VLogFile
+	vlogCount  int32
 	ref        int32
 	state      int32
 }
 
 // NewMemtable _
-func NewMemTable(comparator cmp.Comparator, wal *WalFile) *MemTable {
+func NewMemTable(comparator cmp.Comparator, wal *WalFile, vlog *vlog.VLogFile) *MemTable {
 	arena := utils.NewArena()
 
 	//newFid := atomic.AddUint64(&(lsm.maxFID), 1)
@@ -82,6 +85,7 @@ func NewMemTable(comparator cmp.Comparator, wal *WalFile) *MemTable {
 		table: utils.NewSkipListWithComparator(arena, cmp),
 		//table:      utils.NewSkipListWithComparator(arena, comparator),
 		wal:        wal,
+		vlog:       vlog,
 		comparator: comparator,
 		//comparator: cmp,
 		state: NORMAL,
@@ -98,10 +102,33 @@ func (mem *MemTable) Set(entry *utils.Entry) error {
 			return err
 		}
 	}
-	//  ------------------------    ---------------------
-	// |  `key_size` | key | tag |   | value_size | value |
-	//  -----------------------    ---------------------
-	mem.table.Add(buildInternalKey(entry.Key, entry.Seq), entry.Value)
+	mem.set(entry)
+
+	return nil
+}
+
+//  ------------------------    ---------------------
+// |  `key_size` | key | tag |   | value_size | value |
+//  -----------------------    ---------------------
+func (mem *MemTable) set(entry *utils.Entry) error {
+
+	var val []byte
+	if len(entry.Value) > utils.SP_THRESHOLD {
+		pos := mem.vlog.Pos()
+		if err := mem.vlog.Write(entry); err != nil {
+			return err
+		}
+		val = make([]byte, 1+8+4) // tag + fid + off
+		mem.vlog.Fid()
+		val[0] = utils.VAL_PTR
+		off := copy(val[1:], convert.U64ToBytes(mem.vlog.Fid())) + 1
+		copy(val[off:], convert.U32ToBytes(pos))
+	} else {
+		val = make([]byte, len(entry.Value)+1)
+		val[0] = utils.VAL
+		copy(val[1:], entry.Value)
+	}
+	mem.table.Add(buildInternalKey(entry.Key, entry.Seq), val)
 
 	return nil
 }
@@ -127,36 +154,13 @@ func buildInternalKey(key []byte, seq uint64) []byte {
 	copy(buf[off:], key)
 	off += len(key)
 
-	//var opType uint64 = 0x1
-	//var valType uint64 = 0x10
-	//if len(key) >= 2 {
-	//	valType = 0x20
-	//}
-	//var tag uint64 = opType | valType
-	//var tag uint64 = opType
-
 	copy(buf[off:], convert.U64ToBytes(seq<<8|0x1))
 	off += 8
 	return buf
 }
 
 func (mem *MemTable) Get(key []byte, seq uint64) (*utils.Entry, error) {
-	// codec.VarintLength(uint64(internal_key_size)) + internal_key_size
 
-	//internal_key_size := len(key) + 8
-	//buf := make([]byte, codec.VarintLength(uint64(internal_key_size))+internal_key_size)
-	//off := codec.EncodeVarint32(buf, uint32(internal_key_size))
-	////userKeyOff = off
-	//
-	//copy(buf[off:], key)
-	//off += len(key)
-	//copy(buf[off:], convert.U64ToBytes(seq<<8|0x1))
-
-	// off := codec.EncodeVarint32(buf, codec.VarintLength(uint64(internal_key_size)))
-
-	// internalKey := append(convert.U64ToBytes(seq), key...)
-	//fmt.Println(string(buf))
-	//v := mem.table.Search(buf)
 	buf := buildInternalKey(key, seq)
 	it := mem.table.NewIterator()
 	defer it.Close()
@@ -171,6 +175,17 @@ func (mem *MemTable) Get(key []byte, seq uint64) (*utils.Entry, error) {
 			Key:   parseKey(it.Key()),
 			Value: it.Value(),
 			Seq:   parseSeq(it.Key()),
+		}
+		if v.Value != nil && v.Value[0] == utils.VAL {
+			v.Value = v.Value[1:]
+		} else {
+			//copy(val[1:], convert.U64ToBytes(mem.vlog.Fid()))
+			//copy(val[1:], convert.U32ToBytes(pos))
+			val, err := mem.vlog.ReadAt(convert.BytesToU32(v.Value[9:]))
+			if err != nil {
+				return nil, err
+			}
+			v.Value = val
 		}
 		return v, nil
 	}
@@ -196,12 +211,17 @@ func mtFilePath(dir string, fid uint64) string {
 	return filepath.Join(dir, fmt.Sprintf("%05d%s", fid, walFileExt))
 }
 
+func mtvFilePath(dir string, fid uint64) string {
+	return filepath.Join(dir, fmt.Sprintf("%05d%s", fid, utils.VLOG_FILE_EXT))
+}
+
 func (m *MemTable) recoveryMemTable(opt *utils.Options) func(*utils.Entry) error {
 	return func(e *utils.Entry) error {
 		//  ------------------------    ---------------------
 		// |  key_size | key | tag |   | value_size | value |
 		//  -----------------------    ---------------------
 		return m.table.Add(buildInternalKey(e.Key, e.Seq), e.Value)
+		//return m.set(e)
 	}
 }
 

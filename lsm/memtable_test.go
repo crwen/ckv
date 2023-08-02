@@ -1,25 +1,46 @@
 package lsm
 
 import (
+	"ckv/file"
 	"ckv/utils"
 	"ckv/utils/cmp"
 	"ckv/utils/errs"
+	vlog2 "ckv/vlog"
 	"fmt"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"os"
 	"sync"
 	"testing"
 )
 
+func createMemTable() *MemTable {
+	opt := &file.Options{
+		Path:     "../work_test",
+		FID:      1,
+		MaxSz:    1 << 14,
+		FileName: mtvFilePath("../work_test", 1),
+	}
+	_, err := os.Stat(opt.Path)
+	if err == nil {
+		os.RemoveAll(opt.Path)
+	}
+	os.Mkdir(opt.Path, os.ModePerm)
+
+	vlog := vlog2.OpenVLogFile(opt)
+	return NewMemTable(cmp.ByteComparator{}, nil, vlog)
+
+}
+
 func TestMemTableCreate(t *testing.T) {
-	mem := NewMemTable(cmp.ByteComparator{}, nil)
+	mem := createMemTable()
 	val, err := mem.Get([]byte{1}, 0)
 	assert.Nil(t, val)
 	assert.Equal(t, err, errs.ErrKeyNotFound)
 }
 
 func TestMemTableDestroy(t *testing.T) {
-	mem := NewMemTable(cmp.ByteComparator{}, nil)
+	mem := createMemTable()
 	val, err := mem.Get([]byte{1}, 0)
 	assert.Nil(t, val)
 	assert.Equal(t, err, errs.ErrKeyNotFound)
@@ -28,7 +49,7 @@ func TestMemTableDestroy(t *testing.T) {
 }
 
 func TestMemTableDestroy1(t *testing.T) {
-	mem := NewMemTable(cmp.ByteComparator{}, nil)
+	mem := createMemTable()
 
 	n := 16
 	for i := 0; i < n; i++ {
@@ -42,7 +63,7 @@ func TestMemTableDestroy1(t *testing.T) {
 }
 
 func TestMemTableUpdate(t *testing.T) {
-	mem := NewMemTable(cmp.ByteComparator{}, nil)
+	mem := createMemTable()
 
 	n := 2000
 	for i := 1; i <= n; i++ {
@@ -78,7 +99,7 @@ func TestMemTableUpdate(t *testing.T) {
 }
 
 func TestMemTableUpdateDup(t *testing.T) {
-	mem := NewMemTable(cmp.ByteComparator{}, nil)
+	mem := createMemTable()
 
 	n := 1000
 	for i := 1; i <= n; i++ {
@@ -96,7 +117,7 @@ func TestMemTableUpdateDup(t *testing.T) {
 	for i := 1; i <= n; i++ {
 		e := &utils.Entry{
 			Key:   []byte(fmt.Sprintf("%d", i)),
-			Value: []byte(fmt.Sprintf("abcdefg%d", i)),
+			Value: []byte(fmt.Sprintf("abcdefghijklmnopqrst%d", i)),
 			Seq:   uint64(n + i),
 		}
 		mem.Set(e)
@@ -109,13 +130,18 @@ func TestMemTableUpdateDup(t *testing.T) {
 		assert.Nil(t, v, v)
 
 		v, _ = mem.Get(e.Key, uint64(i+1))
+		if v == nil {
+			fmt.Println(string(e.Key), string(e.Value))
+			return
+		}
 		assert.NotNil(t, v, v)
+
 		assert.NotEqual(t, e.Value, v.Value)
 	}
 }
 
 func TestMemTableIterator(t *testing.T) {
-	mem := NewMemTable(cmp.ByteComparator{}, nil)
+	mem := createMemTable()
 
 	m := make(map[string]string)
 	n := 1000
@@ -150,7 +176,7 @@ func TestMemTableIterator(t *testing.T) {
 
 func TestConcurrentBasic(t *testing.T) {
 	const n = 1000
-	mem := NewMemTable(cmp.ByteComparator{}, nil)
+	mem := createMemTable()
 
 	var wg sync.WaitGroup
 	key := func(i int) []byte {
@@ -185,7 +211,7 @@ func TestConcurrentBasic(t *testing.T) {
 
 func Benchmark_ConcurrentBasic(b *testing.B) {
 	const n = 1000
-	mem := NewMemTable(cmp.ByteComparator{}, nil)
+	mem := createMemTable()
 
 	var wg sync.WaitGroup
 	key := func(i int) []byte {
@@ -220,4 +246,19 @@ func Benchmark_ConcurrentBasic(b *testing.B) {
 		}(i)
 	}
 	wg.Wait()
+}
+
+func TestVLogIter(t *testing.T) {
+	opt := &file.Options{
+		Path:     "../work_test",
+		FID:      1,
+		MaxSz:    1 << 14,
+		FileName: mtvFilePath("../work_test", 1),
+	}
+
+	vlog := vlog2.OpenVLogFile(opt)
+	vlog.Iterate(func(e *utils.Entry) error {
+		fmt.Println(string(e.Key), string(e.Value))
+		return nil
+	})
 }

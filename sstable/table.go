@@ -6,10 +6,13 @@ import (
 	"ckv/utils/codec"
 	"ckv/utils/convert"
 	"ckv/utils/errs"
+	"ckv/vlog"
+	"fmt"
 	"github.com/golang/protobuf/proto"
 	"github.com/pkg/errors"
 	"io"
 	"os"
+	"path/filepath"
 	"sync"
 	"sync/atomic"
 )
@@ -87,6 +90,21 @@ func (t *Table) Serach(key []byte) (entry *utils.Entry, err error) {
 	}
 	if t.Compare(iter.Item().Entry().Key, key) == 0 {
 		e := iter.Item().Entry()
+		tag := e.Value[0]
+		if tag == utils.VAL {
+			e.Value = e.Value[1:]
+		} else {
+			// val ptr
+			fid := convert.BytesToU64(e.Value[1:])
+			pos := convert.BytesToU32(e.Value[9:])
+			vlog := openVLog(t.opt, fid)
+			val, err := vlog.ReadAt(pos)
+			if err != nil {
+				return nil, err
+			}
+			e.Value = val
+			vlog.Close()
+		}
 		//iter.Close()
 		return e, nil
 	}
@@ -95,6 +113,16 @@ func (t *Table) Serach(key []byte) (entry *utils.Entry, err error) {
 
 	return nil, errs.ErrKeyNotFound
 
+}
+func openVLog(opt *utils.Options, fid uint64) *vlog.VLogFile {
+	fileOpt := &file.Options{
+		FID:      fid,
+		FileName: filepath.Join(opt.WorkDir, fmt.Sprintf("%05d%s", fid, utils.VLOG_FILE_EXT)),
+		Dir:      opt.WorkDir,
+		Flag:     os.O_CREATE | os.O_RDWR,
+		MaxSz:    int(opt.MemTableSize),
+	}
+	return vlog.OpenVLogFile(fileOpt)
 }
 
 // findGreaterOrEqual
