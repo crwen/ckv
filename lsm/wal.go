@@ -10,10 +10,12 @@ import (
 	"ckv/utils/errs"
 	"io"
 	"os"
+	"strings"
 	"sync"
 )
 
 const walFileExt string = ".wal"
+const vlogFileExt string = ".vlog"
 
 // Wal
 type WalFile struct {
@@ -143,10 +145,13 @@ func (wal *WalFile) Close() error {
 		return nil
 	}
 	filename := wal.f.Fd.Name()
-	if err := wal.f.Close(); err != nil {
-		return err
-	}
-	return os.Remove(filename)
+	vlogName := strings.Replace(filename, walFileExt, vlogFileExt, 1)
+	return os.Rename(filename, vlogName)
+
+	// if err := wal.f.Close(); err != nil {
+	// 	return err
+	// }
+	// return os.Remove(filename)
 }
 
 func (wal *WalFile) Name() string {

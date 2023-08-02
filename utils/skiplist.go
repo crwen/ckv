@@ -105,9 +105,9 @@ func (node *Node) getValue(arena *Arena) []byte {
 	//return node.value
 }
 func (node *Node) getSeq(arena *Arena) uint64 {
-	// seq := arena.getSeq(node.valueOffset - 8)
-	//return seq
-	return 0
+	seq := arena.getSeq(node.valueOffset - 8)
+	return seq >> 8
+	//return 0
 }
 
 func NewSkipList(arena *Arena) *SkipList {

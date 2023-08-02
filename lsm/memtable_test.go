@@ -43,10 +43,7 @@ func TestMemTableDestroy1(t *testing.T) {
 
 func TestMemTableUpdate(t *testing.T) {
 	mem := NewMemTable(cmp.ByteComparator{}, nil)
-	mem.Set(&utils.Entry{
-		Key:   []byte("123"),
-		Value: []byte("123"),
-	})
+
 	n := 2000
 	for i := 1; i <= n; i++ {
 		e := &utils.Entry{
@@ -72,11 +69,48 @@ func TestMemTableUpdate(t *testing.T) {
 		assert.Equal(t, uint64(i), v.Seq)
 
 		v, _ = mem.Get(e.Key, uint64(i-1))
-		assert.NotNil(t, v)
-		assert.Equal(t, e.Value, v.Value)
+		assert.Nil(t, v, v)
 
 		v, _ = mem.Get(e.Key, uint64(i+1))
+		assert.NotNil(t, v, v)
+		assert.Equal(t, e.Value, v.Value)
+	}
+}
+
+func TestMemTableUpdateDup(t *testing.T) {
+	mem := NewMemTable(cmp.ByteComparator{}, nil)
+
+	n := 1000
+	for i := 1; i <= n; i++ {
+		e := &utils.Entry{
+			Key:   []byte(fmt.Sprintf("%d", i)),
+			Value: []byte(fmt.Sprintf("%d", i)),
+			Seq:   uint64(i),
+		}
+		mem.Set(e)
+		v, _ := mem.Get(e.Key, uint64(i))
+		assert.NotNil(t, v)
+		assert.Equal(t, e.Value, v.Value)
+		assert.Equal(t, uint64(i), v.Seq)
+	}
+	for i := 1; i <= n; i++ {
+		e := &utils.Entry{
+			Key:   []byte(fmt.Sprintf("%d", i)),
+			Value: []byte(fmt.Sprintf("abcdefg%d", i)),
+			Seq:   uint64(n + i),
+		}
+		mem.Set(e)
+		v, _ := mem.Get(e.Key, uint64(i+n))
+		assert.NotNil(t, v)
+		assert.Equal(t, e.Value, v.Value)
+		assert.Equal(t, uint64(i+n), v.Seq)
+
+		v, _ = mem.Get(e.Key, uint64(i-1))
 		assert.Nil(t, v, v)
+
+		v, _ = mem.Get(e.Key, uint64(i+1))
+		assert.NotNil(t, v, v)
+		assert.NotEqual(t, e.Value, v.Value)
 	}
 }
 
@@ -92,7 +126,7 @@ func TestMemTableIterator(t *testing.T) {
 			Seq:   uint64(i),
 		}
 		mem.Set(e)
-		v, _ := mem.Get(e.Key, 0)
+		v, _ := mem.Get(e.Key, uint64(i))
 		assert.NotNil(t, v)
 		assert.Equal(t, e.Value, v.Value)
 		m[string(e.Key)] = string(e.Value)
@@ -137,7 +171,7 @@ func TestConcurrentBasic(t *testing.T) {
 		wg.Add(1)
 		go func(i int) {
 			defer wg.Done()
-			v, err := mem.Get(key(i), 0)
+			v, err := mem.Get(key(i), uint64(i))
 			assert.Nil(t, err)
 			if v != nil {
 				require.EqualValues(t, key(i), v.Value)
@@ -176,7 +210,7 @@ func Benchmark_ConcurrentBasic(b *testing.B) {
 		wg.Add(1)
 		go func(i int) {
 			defer wg.Done()
-			v, err := mem.Get(key(i), 0)
+			v, err := mem.Get(key(i), uint64(i))
 			assert.Nil(b, err)
 			if v != nil {
 				require.EqualValues(b, key(i), v.Value)

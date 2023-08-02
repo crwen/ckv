@@ -17,18 +17,26 @@ type InternalComparator struct {
 	userComparator cmp.Comparator
 }
 
-//func (cmp InternalComparator) Compare(a, b []byte) int {
-//	res := cmp.userComparator.Compare(parseKey(a), parseKey(b))
-//	if res == 0 {
-//		return cmp.userComparator.Compare(a[len(a)-8:], b[len(b)-8:])
-//	}
-//	return res
-//}
-
 func (cmp InternalComparator) Compare(a, b []byte) int {
-	res := cmp.userComparator.Compare(parseInternalKey(a), parseInternalKey(b))
+	res := cmp.userComparator.Compare(parseKey(a), parseKey(b))
+	if res == 0 {
+		anum := convert.BytesToU64(a[len(a)-8:])
+		bnum := convert.BytesToU64(b[len(b)-8:])
+		if anum > bnum {
+			return -1
+		} else if anum < bnum {
+			return 1
+		} else {
+			return 0
+		}
+	}
 	return res
 }
+
+//func (cmp InternalComparator) Compare(a, b []byte) int {
+//	res := cmp.userComparator.Compare(parseInternalKey(a), parseInternalKey(b))
+//	return res
+//}
 
 func newInternalComparator(comparator cmp.Comparator) InternalComparator {
 	return InternalComparator{userComparator: comparator}
@@ -101,7 +109,9 @@ func (mem *MemTable) Set(entry *utils.Entry) error {
 // buildInterKey build internal key
 //
 //	----------------------------
+//
 // |  key_size | key | tag |
+//
 //	---------------------------
 func buildInternalKey(key []byte, seq uint64) []byte {
 
@@ -116,6 +126,14 @@ func buildInternalKey(key []byte, seq uint64) []byte {
 	off := codec.EncodeVarint32(buf, uint32(internal_key_size))
 	copy(buf[off:], key)
 	off += len(key)
+
+	//var opType uint64 = 0x1
+	//var valType uint64 = 0x10
+	//if len(key) >= 2 {
+	//	valType = 0x20
+	//}
+	//var tag uint64 = opType | valType
+	//var tag uint64 = opType
 
 	copy(buf[off:], convert.U64ToBytes(seq<<8|0x1))
 	off += 8
@@ -245,7 +263,7 @@ func parseKey(internalKey []byte) []byte {
 	if len(internalKey) < 8 {
 		return nil
 	}
-	keySz := codec.DecodeVarint32(internalKey[0:4])
+	keySz := codec.DecodeVarint32(internalKey[0:5])
 	off := codec.VarintLength(uint64(keySz))
 	return internalKey[off : len(internalKey)-8]
 }
@@ -254,7 +272,7 @@ func parseInternalKey(key []byte) []byte {
 	if len(key) < 4 {
 		return nil
 	}
-	keySz := codec.DecodeVarint32(key[0:4])
+	keySz := codec.DecodeVarint32(key[0:5])
 	off := codec.VarintLength(uint64(keySz))
 	return key[off:]
 }

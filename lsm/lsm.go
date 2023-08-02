@@ -96,9 +96,10 @@ func (lsm *LSM) Get(key []byte) (*utils.Entry, error) {
 	var (
 		entry *utils.Entry
 		err   error
+		seq   = atomic.LoadUint64(&lsm.seq)
 	)
 	// serach from memtable first
-	if entry, err = lsm.memTable.Get(key, 0); entry != nil && entry.Value != nil {
+	if entry, err = lsm.memTable.Get(key, seq); entry != nil && entry.Value != nil {
 		return entry, err
 	}
 
