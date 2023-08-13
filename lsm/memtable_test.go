@@ -5,7 +5,7 @@ import (
 	"ckv/utils"
 	"ckv/utils/cmp"
 	"ckv/utils/errs"
-	vlog2 "ckv/vlog"
+	"ckv/vlog"
 	"fmt"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -19,7 +19,8 @@ func createMemTable() *MemTable {
 		Path:     "../work_test",
 		FID:      1,
 		MaxSz:    1 << 14,
-		FileName: mtvFilePath("../work_test", 1),
+		Flag:     os.O_CREATE | os.O_RDWR,
+		FileName: mtvFilePath("../work_test", 100),
 	}
 	_, err := os.Stat(opt.Path)
 	if err == nil {
@@ -27,8 +28,7 @@ func createMemTable() *MemTable {
 	}
 	os.Mkdir(opt.Path, os.ModePerm)
 
-	vlog := vlog2.OpenVLogFile(opt)
-	return NewMemTable(cmp.ByteComparator{}, nil, vlog)
+	return NewMemTable(cmp.ByteComparator{}, nil)
 
 }
 
@@ -37,6 +37,23 @@ func TestMemTableCreate(t *testing.T) {
 	val, err := mem.Get([]byte{1}, 0)
 	assert.Nil(t, val)
 	assert.Equal(t, err, errs.ErrKeyNotFound)
+}
+
+func TestMemTableCreateMore(t *testing.T) {
+	mem := createMemTable()
+	for i := 0; i < 3; i++ {
+		for j := 0; j < 20; j++ {
+			e := &utils.Entry{
+				Key:   []byte(fmt.Sprintf("%d", j)),
+				Value: []byte(fmt.Sprintf("%d", j+i*100)),
+			}
+			mem.set(e)
+		}
+	}
+	it := mem.table.NewIterator()
+	for it.Rewind(); it.Valid(); it.Next() {
+		fmt.Println(string(parseKey(it.Item().Entry().Key)), string(it.Item().Entry().Value))
+	}
 }
 
 func TestMemTableDestroy(t *testing.T) {
@@ -56,6 +73,15 @@ func TestMemTableDestroy1(t *testing.T) {
 		e := &utils.Entry{
 			Key:   []byte(fmt.Sprintf("%d", i)),
 			Value: []byte(fmt.Sprintf("%d", i)),
+			Seq:   uint64(i),
+		}
+		mem.Set(e)
+	}
+	for i := 0; i < n; i++ {
+		e := &utils.Entry{
+			Key:   []byte(fmt.Sprintf("%d", i)),
+			Value: []byte(fmt.Sprintf("abc%d", i)),
+			Seq:   uint64(16 + i),
 		}
 		mem.Set(e)
 	}
@@ -253,12 +279,18 @@ func TestVLogIter(t *testing.T) {
 		Path:     "../work_test",
 		FID:      1,
 		MaxSz:    1 << 14,
-		FileName: mtvFilePath("../work_test", 1),
+		Flag:     os.O_CREATE | os.O_RDWR,
+		FileName: mtvFilePath("../work_test", 15),
 	}
 
-	vlog := vlog2.OpenVLogFile(opt)
+	vlog := vlog.OpenVLogFile(opt)
 	vlog.Iterate(func(e *utils.Entry) error {
 		fmt.Println(string(e.Key), string(e.Value))
 		return nil
 	})
+}
+
+func TestName(t *testing.T) {
+	fmt.Println([]byte("BEGIN_MAGIC"))
+	fmt.Println([]byte("END_MAGIC"))
 }

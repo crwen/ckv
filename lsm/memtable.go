@@ -6,7 +6,6 @@ import (
 	"ckv/utils/codec"
 	"ckv/utils/convert"
 	"ckv/utils/errs"
-	"ckv/vlog"
 	"fmt"
 	"path/filepath"
 	"sync/atomic"
@@ -61,14 +60,13 @@ type MemTable struct {
 	table      *Table
 	comparator cmp.Comparator
 	wal        *WalFile
-	vlog       *vlog.VLogFile
 	vlogCount  int32
 	ref        int32
 	state      int32
 }
 
 // NewMemtable _
-func NewMemTable(comparator cmp.Comparator, wal *WalFile, vlog *vlog.VLogFile) *MemTable {
+func NewMemTable(comparator cmp.Comparator, wal *WalFile) *MemTable {
 	arena := utils.NewArena()
 
 	//newFid := atomic.AddUint64(&(lsm.maxFID), 1)
@@ -85,7 +83,6 @@ func NewMemTable(comparator cmp.Comparator, wal *WalFile, vlog *vlog.VLogFile) *
 		table: utils.NewSkipListWithComparator(arena, cmp),
 		//table:      utils.NewSkipListWithComparator(arena, comparator),
 		wal:        wal,
-		vlog:       vlog,
 		comparator: comparator,
 		//comparator: cmp,
 		state: NORMAL,
@@ -112,23 +109,7 @@ func (mem *MemTable) Set(entry *utils.Entry) error {
 //  -----------------------    ---------------------
 func (mem *MemTable) set(entry *utils.Entry) error {
 
-	var val []byte
-	if len(entry.Value) > utils.SP_THRESHOLD {
-		pos := mem.vlog.Pos()
-		if err := mem.vlog.Write(entry); err != nil {
-			return err
-		}
-		val = make([]byte, 1+8+4) // tag + fid + off
-		mem.vlog.Fid()
-		val[0] = utils.VAL_PTR
-		off := copy(val[1:], convert.U64ToBytes(mem.vlog.Fid())) + 1
-		copy(val[off:], convert.U32ToBytes(pos))
-	} else {
-		val = make([]byte, len(entry.Value)+1)
-		val[0] = utils.VAL
-		copy(val[1:], entry.Value)
-	}
-	mem.table.Add(buildInternalKey(entry.Key, entry.Seq), val)
+	mem.table.Add(buildInternalKey(entry.Key, entry.Seq), entry.Value)
 
 	return nil
 }
@@ -176,17 +157,7 @@ func (mem *MemTable) Get(key []byte, seq uint64) (*utils.Entry, error) {
 			Value: it.Value(),
 			Seq:   parseSeq(it.Key()),
 		}
-		if v.Value != nil && v.Value[0] == utils.VAL {
-			v.Value = v.Value[1:]
-		} else {
-			//copy(val[1:], convert.U64ToBytes(mem.vlog.Fid()))
-			//copy(val[1:], convert.U32ToBytes(pos))
-			val, err := mem.vlog.ReadAt(convert.BytesToU32(v.Value[9:]))
-			if err != nil {
-				return nil, err
-			}
-			v.Value = val
-		}
+
 		return v, nil
 	}
 	return nil, errs.ErrKeyNotFound

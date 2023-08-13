@@ -39,15 +39,16 @@ type VLogRecord struct {
 
 // OpenvlogFile _
 func OpenVLogFile(opt *file.Options) *VLogFile {
-	omf, err := file.OpenMmapFile(opt.FileName, os.O_CREATE|os.O_RDWR, opt.MaxSz)
+	omf, err := file.OpenMmapFile(opt.FileName, opt.Flag, opt.MaxSz)
 	if err != nil {
 		panic(err)
 	}
-	wf := &VLogFile{f: omf, lock: &sync.RWMutex{}, opt: opt}
-	wf.buf = &bytes.Buffer{}
-	wf.size = uint32(len(wf.f.Data))
+	vlog := &VLogFile{f: omf, lock: &sync.RWMutex{}, opt: opt}
+	vlog.buf = &bytes.Buffer{}
+	vlog.size = uint32(len(vlog.f.Data))
 	errs.Err(err)
-	return wf
+
+	return vlog
 }
 
 // Write
@@ -91,6 +92,18 @@ func (vlog *VLogFile) Write(entry *utils.Entry) error {
 	return nil
 }
 
+func (vlog *VLogFile) WriteData(data []byte) error {
+	vlog.lock.RLock()
+	defer vlog.lock.RUnlock()
+	dst, err := vlog.f.Bytes(int(vlog.writeAt), len(data))
+	if err != nil {
+		return err
+	}
+	copy(dst, data)
+	vlog.writeAt += uint32(len(data))
+	return nil
+}
+
 func (vlog *VLogFile) ReadAt(pos uint32) ([]byte, error) {
 	vlog.lock.RLock()
 	defer vlog.lock.RUnlock()
@@ -98,6 +111,14 @@ func (vlog *VLogFile) ReadAt(pos uint32) ([]byte, error) {
 
 	record, _, err := vlog.readRecord(reader)
 	return record.value, err
+}
+
+func (vlog *VLogFile) ReadRecord(pos uint32) (*VLogRecord, int, error) {
+	vlog.lock.RLock()
+	defer vlog.lock.RUnlock()
+	reader := bufio.NewReader(vlog.f.NewReader(int(pos)))
+
+	return vlog.readRecord(reader)
 }
 
 func (vlog *VLogFile) readRecord(reader *bufio.Reader) (*VLogRecord, int, error) {
@@ -148,6 +169,67 @@ func (vlog *VLogFile) readRecord(reader *bufio.Reader) (*VLogRecord, int, error)
 	}
 
 	return record, 4 + len(buf), nil
+}
+
+func (vlog *VLogFile) ReadRecordBytes(pos uint32) ([]byte, int, error) {
+	vlog.lock.RLock()
+	defer vlog.lock.RUnlock()
+	reader := bufio.NewReader(vlog.f.NewReader(int(pos)))
+
+	return vlog.readRecordBytes(reader)
+}
+
+func (vlog *VLogFile) readRecordBytes(reader *bufio.Reader) ([]byte, int, error) {
+
+	var record = &VLogRecord{}
+	checksum := make([]byte, 4)
+	if _, err := io.ReadFull(reader, checksum); err != nil {
+		return nil, 0, err
+	}
+	record.checksum = convert.BytesToU32(checksum)
+
+	keySz, err := codec.ReadUVarint32(reader)
+	if err != nil {
+		return nil, 0, err
+	}
+	record.keyLen = keySz
+
+	valSz, err := codec.ReadUVarint32(reader)
+	record.ValueLen = valSz
+
+	if err != nil {
+		return nil, 0, err
+	}
+
+	length := codec.VarintLength(uint64(keySz)) + codec.VarintLength(uint64(valSz)) + 1
+	buf := make([]byte, uint32(length)+keySz+valSz)
+	off := codec.EncodeVarint32(buf, uint32(keySz))
+	off += codec.EncodeVarint32(buf[off:], uint32(valSz))
+
+	if types, err := reader.ReadByte(); err != nil {
+		return nil, 0, err
+	} else {
+		buf[off] = types
+		off += 1
+		record.types = types
+	}
+
+	//io.ReadFull(reader, buf)
+	if _, err := io.ReadFull(reader, buf[length:]); err != nil {
+		return nil, 0, err
+	}
+
+	record.key = buf[uint32(length) : uint32(length)+keySz]
+	record.value = buf[uint32(length)+keySz:]
+
+	if err := codec.VerifyU32Checksum(buf, record.checksum); err != nil {
+		return nil, 0, err
+	}
+
+	newBuf := make([]byte, 4+len(buf))
+	copy(newBuf, checksum)
+	copy(newBuf[4:], buf)
+	return newBuf, 4 + len(buf), nil
 }
 
 func (vlog *VLogFile) Pos() uint32 {

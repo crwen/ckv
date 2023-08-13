@@ -109,7 +109,16 @@ func TestLSM_CRUD_DUP(t *testing.T) {
 		assert.Nil(t, err, string(e.Key))
 		assert.Equal(t, e.Value, v.Value, string(v.Value))
 	}
+	for i := 0; i < n; i++ {
+		e := &utils.Entry{
+			Key:   []byte(fmt.Sprintf("%d", i)),
+			Value: []byte(fmt.Sprintf("abcdefghijklmn%d", i)),
+		}
+		v, err := lsm.Get(e.Key)
 
+		assert.Nil(t, err, string(e.Key))
+		assert.Equal(t, e.Value, v.Value, string(v.Value))
+	}
 }
 
 func TestLSM_C(t *testing.T) {

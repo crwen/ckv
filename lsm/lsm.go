@@ -5,6 +5,7 @@ import (
 	"ckv/sstable"
 	"ckv/utils"
 	"ckv/utils/cmp"
+	"ckv/utils/convert"
 	"ckv/utils/errs"
 	"ckv/version"
 	"ckv/vlog"
@@ -58,6 +59,7 @@ func NewLSM(opt *utils.Options) *LSM {
 	lsm.memTable, lsm.immutables = lsm.recovery()
 	//lsm.memTable = lsm.NewMemTable()
 	go lsm.verSet.RunCompact()
+	go lsm.verSet.RunGC()
 	return lsm
 }
 
@@ -77,7 +79,7 @@ func (lsm *LSM) Set(entry *utils.Entry) (err error) {
 
 	// TODO 计算内存大小
 	if lsm.memTable.Size() > lsm.option.MemTableSize {
-		lsm.Rotate()
+		lsm.rotate()
 	}
 	sequence := atomic.AddUint64(&lsm.seq, 1)
 	entry.Seq = sequence
@@ -106,7 +108,7 @@ func (lsm *LSM) Get(key []byte) (*utils.Entry, error) {
 
 	// search from immutable, beginning at the newest immutable
 	for i := len(lsm.immutables) - 1; i >= 0; i-- {
-		if entry, err = lsm.immutables[i].Get(key, 0); entry != nil && entry.Value != nil {
+		if entry, err = lsm.immutables[i].Get(key, seq); entry != nil && entry.Value != nil {
 			return entry, err
 		}
 	}
@@ -129,14 +131,40 @@ func (lsm *LSM) WriteLevel0Table(immutable *MemTable) (err error) {
 	//iter := immutable.table.NewIterator()
 	iter := immutable.NewMemTableIterator()
 	defer iter.Close()
+
+	vlog := lsm.openVLog(fid, true)
+
 	var entry *utils.Entry
+	var firstEntry *utils.Entry
 	for iter.Rewind(); iter.Valid(); iter.Next() {
+		if firstEntry == nil {
+			firstEntry = iter.Item().Entry()
+		}
 		entry = iter.Item().Entry()
+		var val []byte
+		if len(entry.Value) > utils.SP_THRESHOLD {
+			pos := vlog.Pos()
+			if err := vlog.Write(entry); err != nil {
+				return err
+			}
+			val = make([]byte, 1+8+4) // tag + fid + off
+			vlog.Fid()
+			val[0] = utils.VAL_PTR
+			off := copy(val[1:], convert.U64ToBytes(vlog.Fid())) + 1
+			copy(val[off:], convert.U32ToBytes(pos))
+		} else {
+			val = make([]byte, len(entry.Value)+1)
+			val[0] = utils.VAL
+			copy(val[1:], entry.Value)
+		}
+		entry.Value = val
 		builder.Add(entry, false)
 	}
 
+	vlog.Close()
 	t, err := builder.Flush(sstName)
 	t.MaxKey = entry.Key
+	//t.MinKey = firstEntry.Key
 	if err != nil {
 		errs.Panic(err)
 	}
@@ -144,22 +172,13 @@ func (lsm *LSM) WriteLevel0Table(immutable *MemTable) (err error) {
 	//level := 0
 	level := lsm.verSet.PickLevelForMemTableOutput(t.MinKey, t.MaxKey)
 
-	lsm.verSet.AddNewVLogGroup(fid)
-
-	// TODO update manifest
-	ve := version.NewVersionEdit()
-	ve.RecordAddFileMeta(level, t)
-	lsm.verSet.LogAndApply(ve)
-
-	lsm.verSet.AddFileMeta(level, t)
-	//lsm.lm.levels[0].add(t)
-	//immutable.state = -1
+	lsm.verSet.AddFileMetaWithGroup(level, t)
 
 	return
 }
 
-// Rotate append MemTable to immutable, and create a new MemTable
-func (lsm *LSM) Rotate() {
+// rotate append MemTable to immutable, and create a new MemTable
+func (lsm *LSM) rotate() {
 	lsm.lock.Lock()
 	defer lsm.lock.Unlock()
 
@@ -171,7 +190,7 @@ func (lsm *LSM) Rotate() {
 		} else {
 			lsm.immutables = append(lsm.immutables, lsm.memTable)
 			wal := lsm.openWal()
-			lsm.memTable = NewMemTable(lsm.option.Comparable, wal, lsm.openVLog(wal.Fid()))
+			lsm.memTable = NewMemTable(lsm.option.Comparable, wal)
 			lsm.maybeScheduleCompaction()
 		}
 	}
@@ -214,14 +233,17 @@ func (lsm *LSM) recovery() (*MemTable, []*MemTable) {
 			continue
 		}
 		imms = append(imms, mt)
+		os.Remove(file.FileNameVLog(lsm.option.WorkDir, fid))
 	}
-	lsm.verSet.NextFileNumber = maxFID
+	if maxFID > lsm.verSet.NextFileNumber {
+		lsm.verSet.NextFileNumber = maxFID
+	}
 	for _, imm := range imms {
 		lsm.WriteLevel0Table(imm)
 	}
 	lsm.immutables = lsm.immutables[:0]
 	wal := lsm.openWal()
-	return NewMemTable(lsm.option.Comparable, wal, lsm.openVLog(wal.Fid())), imms[:0]
+	return NewMemTable(lsm.option.Comparable, wal), imms[:0]
 }
 
 func (lsm *LSM) openWal() *WalFile {
@@ -236,7 +258,8 @@ func (lsm *LSM) openWal() *WalFile {
 	return OpenWalFile(fileOpt)
 }
 
-func (lsm *LSM) openVLog(fid uint64) *vlog.VLogFile {
+func (lsm *LSM) openVLog(fid uint64, delete bool) *vlog.VLogFile {
+
 	fileOpt := &file.Options{
 		FID:      fid,
 		FileName: mtvFilePath(lsm.option.WorkDir, fid),

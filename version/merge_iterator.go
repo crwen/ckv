@@ -34,38 +34,47 @@ func merge(iter1 utils.Iterator, iter2 utils.Iterator) utils.Iterator {
 func (iter *MergeIterator) Next() {
 	var smallest []byte
 	k := iter.curr.Item().Entry().Key
+	var seq uint64
+
 	n := 0
 	for i := 0; i < len(iter.list); i++ {
 		if iter.curr == iter.list[i] {
 			iter.list[i].Next()
 		}
+		// skip keys that equal with k
 		for iter.list[i].Valid() && iter.cmp.Compare(iter.list[i].Item().Entry().Key, k) == 0 {
 			iter.list[i].Next()
 		}
-		if iter.list[i].Valid() && smallest == nil {
-			smallest = iter.list[i].Item().Entry().Key
-			n = i
-		} else if iter.list[i].Valid() && iter.cmp.Compare(iter.list[i].Item().Entry().Key, smallest) < 0 {
-			smallest = iter.list[i].Item().Entry().Key
-			n = i
-		}
-	}
-	var seq uint64
-	for i := 0; i < len(iter.list); i++ {
-
+		// find next key
 		if iter.list[i].Valid() && smallest == nil {
 			smallest = iter.list[i].Item().Entry().Key
 			seq = iter.list[i].Item().Entry().Seq
 			n = i
-		} else if iter.list[i].Valid() && iter.cmp.Compare(iter.list[i].Item().Entry().Key, smallest) <= 0 {
-			if iter.list[i].Item().Entry().Seq <= seq {
-				continue
+		} else if iter.list[i].Valid() {
+			r := iter.cmp.Compare(iter.list[i].Item().Entry().Key, smallest)
+			if r < 0 || (r == 0 && iter.list[i].Item().Entry().Seq > seq) {
+				smallest = iter.list[i].Item().Entry().Key
+				seq = iter.list[i].Item().Entry().Seq
+				n = i
 			}
-			smallest = iter.list[i].Item().Entry().Key
-			seq = iter.list[i].Item().Entry().Seq
-			n = i
+
 		}
 	}
+	//for i := 0; i < len(iter.list); i++ {
+	//
+	//	if iter.list[i].Valid() && smallest == nil {
+	//		smallest = iter.list[i].Item().Entry().Key
+	//		seq = iter.list[i].Item().Entry().Seq
+	//		n = i
+	//	} else if iter.list[i].Valid() && iter.cmp.Compare(iter.list[i].Item().Entry().Key, smallest) <= 0 {
+	//		if iter.list[i].Item().Entry().Seq <= seq {
+	//			continue
+	//		}
+	//		smallest = iter.list[i].Item().Entry().Key
+	//		seq = iter.list[i].Item().Entry().Seq
+	//		n = i
+	//	}
+	//}
 	iter.curr = iter.list[n]
 	//iter.list[n].Next()
 }
@@ -81,15 +90,21 @@ func (iter *MergeIterator) Valid() bool {
 
 func (iter *MergeIterator) Rewind() {
 	var key []byte
+	var seq uint64
 	for i, it := range iter.list {
 		it.Rewind()
 		iter.list[i] = it
 		if it.Valid() && key == nil {
 			key = it.Item().Entry().Key
+			seq = it.Item().Entry().Seq
 			iter.curr = it
-		} else if it.Valid() && iter.cmp.Compare(it.Item().Entry().Key, key) < 0 {
-			key = it.Item().Entry().Key
-			iter.curr = it
+		} else if it.Valid() {
+			r := iter.cmp.Compare(it.Item().Entry().Key, key)
+			if r < 0 || (r == 0 && it.Item().Entry().Seq > seq) {
+				key = it.Item().Entry().Key
+				seq = it.Item().Entry().Seq
+				iter.curr = it
+			}
 		}
 	}
 }
