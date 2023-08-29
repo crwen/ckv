@@ -143,6 +143,7 @@ func (wal *WalFile) Close() error {
 		return nil
 	}
 	filename := wal.f.Fd.Name()
+
 	if err := wal.f.Close(); err != nil {
 		return err
 	}

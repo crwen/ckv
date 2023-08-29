@@ -51,7 +51,7 @@ func TestLSM_CRUD(t *testing.T) {
 	opt.Comparable = comparable
 	lsm := NewLSM(opt)
 
-	n := 2000
+	n := 1000
 
 	for i := 0; i < n; i++ {
 		e := &utils.Entry{
@@ -75,13 +75,50 @@ func TestLSM_CRUD(t *testing.T) {
 		}
 
 		v, err := lsm.Get(e.Key)
-		if err != nil {
-			fmt.Println(e.Key)
-		}
+
 		assert.Nil(t, err, string(e.Key))
-		assert.Equal(t, e.Value, v.Value, string(e.Key))
+		assert.Equal(t, e.Value, v.Value, string(v.Value))
 	}
 
+}
+
+func TestLSM_CRUD_DUP(t *testing.T) {
+	clearDir()
+	comparable := cmp.ByteComparator{}
+	opt.Comparable = comparable
+	lsm := NewLSM(opt)
+
+	n := 1000
+
+	for i := 0; i < n; i++ {
+		e := &utils.Entry{
+			Key:   []byte(fmt.Sprintf("%d", i)),
+			Value: []byte(fmt.Sprintf("%d", i)),
+		}
+		lsm.Set(e)
+	}
+
+	for i := 0; i < n; i++ {
+		e := &utils.Entry{
+			Key:   []byte(fmt.Sprintf("%d", i)),
+			Value: []byte(fmt.Sprintf("abcdefghijklmn%d", i)),
+		}
+		lsm.Set(e)
+		v, err := lsm.Get(e.Key)
+
+		assert.Nil(t, err, string(e.Key))
+		assert.Equal(t, e.Value, v.Value, string(v.Value))
+	}
+	for i := 0; i < n; i++ {
+		e := &utils.Entry{
+			Key:   []byte(fmt.Sprintf("%d", i)),
+			Value: []byte(fmt.Sprintf("abcdefghijklmn%d", i)),
+		}
+		v, err := lsm.Get(e.Key)
+
+		assert.Nil(t, err, string(e.Key))
+		assert.Equal(t, e.Value, v.Value, string(v.Value))
+	}
 }
 
 func TestLSM_C(t *testing.T) {

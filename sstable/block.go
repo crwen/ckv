@@ -78,7 +78,7 @@ type Header struct {
 const headerSize = uint16(unsafe.Sizeof(Header{}))
 
 func (h Header) encode() []byte {
-	var b [4]byte
+	var b [headerSize]byte
 	*(*Header)(unsafe.Pointer(&b[0])) = h
 	return b[:]
 }

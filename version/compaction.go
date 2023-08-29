@@ -5,6 +5,7 @@ import (
 	"ckv/sstable"
 	"ckv/utils"
 	"ckv/utils/errs"
+	"fmt"
 	"log"
 	"math/rand"
 	"sort"
@@ -57,22 +58,22 @@ func (vs *VersionSet) RunCompact() int {
 
 	ticker := time.NewTicker(3000 * time.Millisecond)
 	defer ticker.Stop()
-	for {
+	//for {
 
-		//select {
-		//case <- ticker.C:
-		<-ticker.C
-		vs.compact(1)
-		//TODO close case <- close:
+	//select {
+	//case <- ticker.C:
+	<-ticker.C
+	vs.compact(1)
+	//TODO close case <- close:
 
-		//}
-	}
+	//}
+	//}
 	return 0
 }
 
 func (vs *VersionSet) compact(id int) {
-	//vs.lock.Lock()
-	//vs.lock.Unlock()
+
+	opt := vs.current.opt
 	c := vs.pickCompaction()
 	if c == nil || len(c.base)+len(c.target) <= 1 {
 		return
@@ -84,86 +85,113 @@ func (vs *VersionSet) compact(id int) {
 	for _, meta := range c.base {
 		id := meta.id
 		t := vs.FindTable(id)
-		iters = append(iters, t.NewIterator(vs.current.opt))
+		iters = append(iters, t.NewIterator(opt))
 	}
 	for _, meta := range c.target {
 		id := meta.id
 		t := vs.FindTable(id)
 		//t := sstable.OpenTable(vs.current.opt, id)
-		iters = append(iters, t.NewIterator(vs.current.opt))
+		iters = append(iters, t.NewIterator(opt))
 	}
+	newFid := vs.IncreaseNextFileNumber(1)
 
-	iter := NewMergeIterator(iters, vs.current.opt.Comparable)
-	builer := sstable.NewTableBuiler(vs.current.opt)
+	iter := NewMergeIterator(iters, opt.Comparable)
+	builder := sstable.NewTableBuiler(opt)
 	var entry *utils.Entry
-	for iter.seekToFirst(); iter.Valid(); iter.Next() {
+
+	for iter.Rewind(); iter.Valid(); iter.Next() {
 		entry = iter.Item().Entry()
-		builer.Add(entry, false)
+		builder.Add(entry, false)
+
 	}
 	iter.Close()
 
-	newFid := vs.IncreaseNextFileNumber(1)
-	sstName := file.FileNameSSTable(vs.current.opt.WorkDir, newFid)
-	t, err := builer.Flush(sstName)
-	t.MaxKey = entry.Key
+	sstName := file.FileNameSSTable(opt.WorkDir, newFid)
+	t, err := builder.Flush(sstName)
+	//t.MinKey = firstEntry.Key
 	if err != nil {
 		errs.Panic(err)
 	}
+	t.MaxKey = entry.Key
 
 	ve := NewVersionEdit()
 	ve.RecordAddFileMeta(c.targetLevel, t)
 
+	mergeFids := make([]uint64, 0)
 	for _, meta := range c.base {
 		id := meta.id
 		t := vs.FindTable(id)
 		ve.RecordDeleteFileMeta(c.baseLevel, t)
+		mergeFids = append(mergeFids, id)
 	}
 	for _, meta := range c.target {
 		id := meta.id
 		t := vs.FindTable(id)
 		ve.RecordDeleteFileMeta(c.targetLevel, t)
+		mergeFids = append(mergeFids, id)
 	}
-	vs.LogAndApply(ve)
-	vs.AddFileMeta(c.targetLevel, t)
+
+	//TODO: write vgroup to manifest
 
 	// delete
 	vs.lock.Lock()
 	defer vs.lock.Unlock()
+
+	vs.LogAndApply(ve)
+	vs.addFileMeta(c.targetLevel, t)
+
+	vs.info.MergeVLogGroup(mergeFids, newFid)
+	vs.info.SetTableState(newFid, NORMAL)
+
 	for _, meta := range c.base {
 		id := meta.id
 		t := vs.FindTable(id)
-		vs.DeleteFileMeta(c.baseLevel, t)
-		//t.DeleteFileMeta()
+		vs.DeleteFileMeta(c.baseLevel, c.targetLevel, t)
+		vs.info.SetTableState(id, NORMAL)
 
-		t.DecrRef()
-
+		t.DecrRef(nil)
 	}
 	for _, meta := range c.target {
 		id := meta.id
 		t := vs.FindTable(id)
-		vs.DeleteFileMeta(c.targetLevel, t)
-		//t.DeleteFileMeta()
+		vs.DeleteFileMeta(c.targetLevel, c.targetLevel, t)
+		vs.info.SetTableState(id, NORMAL)
 
-		t.DecrRef()
+		t.DecrRef(nil)
 
 	}
 
 	log.Printf("compact from level %d to level %d. create %s. delete %d files \n",
 		c.baseLevel, c.targetLevel, sstName, len(ve.deletes))
-	//for _, me := range ve.deletes {
-	//	log.Printf("%d ", me.f.id)
-	//}
-	//log.Println()
+
 }
 
 // pickCompaction method    pick sstables to compact
 func (vs *VersionSet) pickCompaction() *Compaction {
+	vs.lock.Lock()
+	defer vs.lock.Unlock()
+
 	var c Compaction
 	c.baseLevel = vs.current.pickCompactionLevel()
+
+	filter := func(file *FileMetaData) bool {
+		if state, ok := vs.info.GetTableState(file.id); ok && state == NORMAL {
+			return true
+		}
+		return false
+	}
 	// compact itself for max level
+	// TODO: remove?
+	c.base = make([]*FileMetaData, 0)
+	c.target = make([]*FileMetaData, 0)
 	if c.baseLevel == vs.current.opt.MaxLevelNum-1 {
-		c.base = make([]*FileMetaData, 0)
-		c.target = append(c.target, vs.current.files[c.baseLevel]...)
+		for i := range vs.current.files[c.baseLevel] {
+			if filter(vs.current.files[c.baseLevel][i]) {
+				c.target = append(c.target, vs.current.files[c.baseLevel][i])
+			}
+		}
+		//c.target = filter(vs.current.files[c.baseLevel])
+
 		c.targetLevel = c.baseLevel
 		return &c
 	}
@@ -174,7 +202,12 @@ func (vs *VersionSet) pickCompaction() *Compaction {
 	var smallest, largest []byte
 	cmp := vs.current.opt.Comparable
 	if c.baseLevel == 0 {
-		c.base = append(c.base, vs.current.files[0]...)
+		for i := range vs.current.files[c.baseLevel] {
+			if filter(vs.current.files[c.baseLevel][i]) {
+				c.base = append(c.base, vs.current.files[c.baseLevel][i])
+			}
+		}
+		//c.base = append(c.base, vs.current.files[0]...)
 		utils.AssertTrue(len(c.base) > 0)
 		if len(c.base) > 0 {
 			smallest, largest = c.base[0].smallest, c.base[0].largest
@@ -195,21 +228,54 @@ func (vs *VersionSet) pickCompaction() *Compaction {
 			return cmp.Compare(vs.current.files[c.baseLevel][i].smallest,
 				vs.current.files[c.baseLevel][j].smallest) < 0
 		})
-		smallest = vs.current.files[c.baseLevel][0].smallest
-		largest = vs.current.files[c.baseLevel][0].largest
-		c.base = append(c.base, vs.current.files[c.baseLevel][0])
+		c.base = make([]*FileMetaData, 0)
+		c.target = make([]*FileMetaData, 0)
+		var pendingGC = vs.pendingGC
+		if pendingGC != nil {
+			if vs.pendingGC.level == c.baseLevel {
+				for i := 0; i < len(vs.current.files[c.baseLevel]); i++ {
+					meta := vs.current.files[c.baseLevel][i]
+					if state, ok := vs.info.GetTableState(meta.id); ok && state == NORMAL && meta.id != vs.pendingGC.sstId {
+						c.base = append(c.base, vs.current.files[c.baseLevel][i])
+						smallest = vs.current.files[c.baseLevel][i].smallest
+						largest = vs.current.files[c.baseLevel][i].largest
+						break
+					}
+				}
+			} else if vs.pendingGC.level == c.targetLevel {
+				for i := 0; i < len(vs.current.files[c.baseLevel]); i++ {
+					meta := vs.current.files[c.baseLevel][i]
+					if cmp.Compare(pendingGC.smallest, meta.largest) > 0 ||
+						cmp.Compare(pendingGC.largest, meta.smallest) < 0 {
+						c.base = append(c.base, vs.current.files[c.baseLevel][i])
+						smallest = vs.current.files[c.baseLevel][i].smallest
+						largest = vs.current.files[c.baseLevel][i].largest
+						break
+					}
+				}
+			}
+		}
+		if len(c.base) == 0 {
+			return &c
+		}
+
+		vs.info.SetTableState(c.base[0].id, COMPACTING)
 
 		// append sst that overlap
+		// cannot happen
 		for i := 0; i < len(vs.current.files[c.baseLevel]); i++ {
 			f := vs.current.files[c.baseLevel][i]
+			if state, ok := vs.info.GetTableState(f.id); ok && state != NORMAL {
+				continue
+			}
 			// if there are overlap key, append to base
 			if cmp.Compare(f.smallest, largest) <= 0 {
 				c.base = append(c.base, f)
 				largest = f.largest
+				panic(fmt.Sprintf("overlapped key between SSTable in level %d", c.baseLevel))
 			}
 		}
 	}
-
 	for i := 0; i < len(vs.current.files[c.targetLevel]); i++ {
 		f := vs.current.files[c.targetLevel][i]
 
@@ -217,9 +283,9 @@ func (vs *VersionSet) pickCompaction() *Compaction {
 			continue
 		} else {
 			c.target = append(c.target, f)
+			vs.info.SetTableState(f.id, COMPACTING)
 		}
 	}
-	log.Printf("base: %v\n target: %v\n", c.base, c.target)
 	return &c
 }
 

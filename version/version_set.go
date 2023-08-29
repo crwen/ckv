@@ -16,8 +16,12 @@ import (
 )
 
 const (
-	VersionEdit_CREATE = 0
-	VersionEdit_DELETE = 1
+	VersionEdit_CREATE      = 0
+	VersionEdit_DELETE      = 1
+	VersionEdit_BEGIN       = 2
+	VersionEdit_END         = 3
+	VersionEdit_BEGIN_MAGIC = "BEGIN_MAGIC"
+	VersionEdit_END_MAGIC   = "END_MAGIC"
 )
 
 type VersionSet struct {
@@ -28,7 +32,9 @@ type VersionSet struct {
 	head       *Version
 	current    *Version
 	tableCache *cache.Cache
+	info       *Statistic
 	lock       sync.RWMutex
+	pendingGC  *VFileMetaData
 }
 
 func Open(opt *utils.Options) (*VersionSet, error) {
@@ -49,106 +55,178 @@ func Open(opt *utils.Options) (*VersionSet, error) {
 }
 
 func NewVersionSet(opt *utils.Options) *VersionSet {
-	path := filepath.Join(opt.WorkDir, ManifestFilename)
-	f, err := os.OpenFile(path, os.O_CREATE|os.O_RDWR|os.O_APPEND, 0666)
+	manifestPath := filepath.Join(opt.WorkDir, ManifestFilename)
+	vmanifestPath := filepath.Join(opt.WorkDir, VManifestFilename)
+	f, err := os.OpenFile(manifestPath, os.O_CREATE|os.O_RDWR|os.O_APPEND, 0666)
 	if err != nil {
 		return nil
 	}
-	vs := &VersionSet{lock: sync.RWMutex{}}
+	//vs := &VersionSet{Lock: sync.RWMutex{}}
+
 	current := NewVersion(opt)
-	current.vset = vs
 	current.f = f
-	vs.current = current
-	vs.head = &Version{}
-	vs.tableCache = cache.NewCache(100, 100)
+	vf, err := os.OpenFile(vmanifestPath, os.O_CREATE|os.O_RDWR|os.O_APPEND, 0666)
+	if err != nil {
+		return nil
+	}
+	current.vf = vf
+
+	vs := &VersionSet{
+		NextFileNumber:     0,
+		manifestFileNumber: 0,
+		logNumber:          0,
+		head:               &Version{},
+		current:            current,
+		tableCache:         cache.NewCache(100, 100),
+		info:               NewStatistic(),
+		lock:               sync.RWMutex{},
+	}
+	current.vset = vs
 
 	return vs
 }
 
 func (vs *VersionSet) LogAndApply(ve *VersionEdit) {
+	vs.current.logBegin()
 	for _, tableMeta := range ve.adds {
 		vs.current.log(tableMeta.level, tableMeta.f, VersionEdit_CREATE)
 	}
 	for _, tableMeta := range ve.deletes {
 		vs.current.log(tableMeta.level, tableMeta.f, VersionEdit_DELETE)
 	}
+	vs.current.logEnd()
 }
+
+func (vs *VersionSet) VLogAndApply(ve *VersionEdit) {
+	for _, tableMeta := range ve.adds {
+		vs.current.vlog(tableMeta.level, tableMeta.f, VersionEdit_CREATE)
+	}
+	for _, tableMeta := range ve.deletes {
+		vs.current.vlog(tableMeta.level, tableMeta.f, VersionEdit_DELETE)
+	}
+}
+
 func (vs *VersionSet) Replay() {
 	current := vs.current
 	r := bufio.NewReader(current.f)
-	//io.ReadFull()
+	var maxFid uint64
+	var adds, deletes [][]*FileMetaData
+	begin, end := false, false
 
 	for {
-		buf := make([]byte, 16)
-		_, err := io.ReadFull(r, buf)
-		if err != nil {
-			break
-		}
-		op := convert.BytesToU16(buf[0:2])
-		level := convert.BytesToU16(buf[2:4])
-		fm := &FileMetaData{}
-		fm.id = convert.BytesToU64(buf[4:12])
-		ssz := convert.BytesToU32(buf[12:])
-		smallest := make([]byte, ssz)
-		_, err = io.ReadFull(r, smallest)
-		if err != nil {
-			break
-		}
-		fm.smallest = smallest
+		for {
+			var flag = false
+			op, err := r.ReadByte()
+			if err != nil {
+				break
+			}
+			switch op {
+			case VersionEdit_BEGIN:
+				if begin || end {
+					flag = true
+					break
+				}
+				if err := current.checkBeginLog(r); err != nil {
+					flag = true
+					break
+				}
+				begin = true
+				adds = make([][]*FileMetaData, vs.current.opt.MaxLevelNum)
+				deletes = make([][]*FileMetaData, vs.current.opt.MaxLevelNum)
+			case VersionEdit_END:
+				if err := current.checkEndLog(r); err != nil {
+					flag = true
+					break
+				}
+				end = true
+			default:
+				if !begin || end {
+					flag = true
+					break
+				}
+				buf := make([]byte, 14)
+				_, err := io.ReadFull(r, buf)
+				if err != nil {
+					flag = true
+					break
+				}
+				level := convert.BytesToU16(buf[0:2])
+				fm := &FileMetaData{}
+				fm.id = convert.BytesToU64(buf[2:10])
+				ssz := convert.BytesToU32(buf[10:])
+				if fm.id > maxFid {
+					maxFid = fm.id
+				}
+				smallest := make([]byte, ssz)
+				_, err = io.ReadFull(r, smallest)
+				if err != nil {
+					flag = true
+					break
+				}
+				fm.smallest = smallest
 
-		buf = make([]byte, 4)
-		_, err = io.ReadFull(r, buf)
-		if err != nil {
+				buf = make([]byte, 4)
+				_, err = io.ReadFull(r, buf)
+				if err != nil {
+					flag = true
+					break
+				}
+				lsz := convert.BytesToU32(buf)
+				largest := make([]byte, lsz)
+				_, err = io.ReadFull(r, largest)
+				if err != nil {
+					flag = true
+					break
+				}
+				fm.largest = largest
+				switch op {
+				case VersionEdit_CREATE:
+					adds[level] = append(adds[level], fm)
+				case VersionEdit_DELETE:
+					deletes[level] = append(deletes[level], fm)
+				}
+			}
+			if flag || (end && begin) {
+				break
+			}
+		}
+
+		if !begin || !end {
 			break
 		}
-		lsz := convert.BytesToU32(buf)
-		largest := make([]byte, lsz)
-		_, err = io.ReadFull(r, largest)
-		if err != nil {
-			break
-		}
-		fm.largest = largest
+		begin, end = false, false
 
-		//sz := codec.DecodeVarint32(buf)
-		//off := codec.VarintLength(uint64(sz))
-		//smallest := make([]byte, sz)
-		//copy(smallest, buf[off:])
-		//r.Read(smallest[sz-off:])
-		//buf = make([]byte, 4)
-		//_, err = r.Read(buf)
-		//if err != nil {
-		//	break
-		//}
-		//sz = codec.DecodeVarint32(buf)
-		//off = codec.VarintLength(uint64(sz))
-		//largets := make([]byte, sz)
-		//copy(largets, buf[off:])
-		//r.Read(largets[sz-off:])
-		//fm := &FileMetaData{
-		//	id:       id,
-		//	largest:  largets,
-		//	smallest: smallest,
-		//}
-
-		switch op {
-		case VersionEdit_CREATE:
-			current.files[level] = append(current.files[level], fm)
-		case VersionEdit_DELETE:
-			current.deleteFile(level, fm)
-			//delete(current.files[level], fm.id)
+		for i := range adds {
+			if adds[i] != nil {
+				current.files[i] = append(current.files[i], adds[i]...)
+			}
 		}
-		//fmt.Printf("level %d, op %d, fid:%d, %s %s\n", level, op, fm.id, string(fm.smallest), string(fm.largest))
+		for i := range deletes {
+			if deletes[i] != nil {
+				for j := range deletes[i] {
+					current.deleteFile(uint16(i), deletes[i][j])
+				}
+			}
+		}
 	}
-	//fmt.Println("=================")
-	//for i, data := range current.files {
-	//	fmt.Printf("level %d has %d files\n", i, len(data))
-	//}
 
+	vs.NextFileNumber = maxFid
 }
 
-func (vs *VersionSet) AddFileMeta(level int, t *sstable.Table) {
+func (vs *VersionSet) AddFileMetaWithGroup(level int, t *sstable.Table) {
 	vs.lock.Lock()
 	defer vs.lock.Unlock()
+
+	ve := NewVersionEdit()
+	ve.RecordAddFileMeta(level, t)
+	vs.LogAndApply(ve)
+
+	vs.addFileMeta(level, t)
+	vs.AddNewVLogGroup(t.Fid())
+}
+
+func (vs *VersionSet) addFileMeta(level int, t *sstable.Table) {
+
 	meta := &FileMetaData{
 		id:       t.Fid(),
 		largest:  t.MaxKey,
@@ -156,13 +234,27 @@ func (vs *VersionSet) AddFileMeta(level int, t *sstable.Table) {
 		fileSize: t.Size(),
 	}
 	vs.current.files[level] = append(vs.current.files[level], meta)
+	vs.current.vfiles[level] = append(vs.current.vfiles[level], &VFileGroupMetaData{
+		sstId: meta.id,
+		vfids: make([]uint64, 0),
+	})
 	vs.tableCache.AddIndex(t.Fid(), t.Index())
 }
 
-func (vs *VersionSet) DeleteFileMeta(level int, t *sstable.Table) {
+func (vs *VersionSet) DeleteFileMeta(level, targetLevel int, t *sstable.Table) {
+	var vfileMeta *VFileGroupMetaData
 	for i := 0; i < len(vs.current.files[level]); i++ {
 		if vs.current.files[level][i].id == t.Fid() {
 			vs.current.files[level] = append(vs.current.files[level][0:i], vs.current.files[level][i+1:]...)
+			// delete from old level
+			vfileMeta = vs.current.vfiles[level][i]
+			vs.current.vfiles[level] = append(vs.current.vfiles[level][0:i], vs.current.vfiles[level][i+1:]...)
+			break
+		}
+	}
+	for i := 0; i < len(vs.current.vfiles[targetLevel]); i++ {
+		if vs.current.vfiles[targetLevel][i].sstId == t.Fid() {
+			vs.current.vfiles[targetLevel][i].vfids = append(vs.current.vfiles[targetLevel][i].vfids, vfileMeta.vfids...)
 			break
 		}
 	}
@@ -247,11 +339,8 @@ func (vs *VersionSet) IncreaseNextFileNumber(delta uint64) uint64 {
 	return newFid
 }
 
-//func (vs *VersionSet) Get(key []byte) (*utils.Entry, error) {
-//current := vs.current
-//for _, meta := range current.files[0]{
-//	if meta {
-//
-//	}
-//}
-//}
+func (vs *VersionSet) AddNewVLogGroup(fid uint64) {
+
+	vs.info.AddNewVLogWithGroup(fid)
+	vs.info.SetTableState(fid, NORMAL)
+}

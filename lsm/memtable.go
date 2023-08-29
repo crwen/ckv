@@ -17,18 +17,26 @@ type InternalComparator struct {
 	userComparator cmp.Comparator
 }
 
-//func (cmp InternalComparator) Compare(a, b []byte) int {
-//	res := cmp.userComparator.Compare(parseKey(a), parseKey(b))
-//	if res == 0 {
-//		return cmp.userComparator.Compare(a[len(a)-8:], b[len(b)-8:])
-//	}
-//	return res
-//}
-
 func (cmp InternalComparator) Compare(a, b []byte) int {
-	res := cmp.userComparator.Compare(parseInternalKey(a), parseInternalKey(b))
+	res := cmp.userComparator.Compare(parseKey(a), parseKey(b))
+	if res == 0 {
+		anum := convert.BytesToU64(a[len(a)-8:]) >> 8
+		bnum := convert.BytesToU64(b[len(b)-8:]) >> 8
+		if anum > bnum {
+			return -1
+		} else if anum < bnum {
+			return 1
+		} else {
+			return 0
+		}
+	}
 	return res
 }
+
+//func (cmp InternalComparator) Compare(a, b []byte) int {
+//	res := cmp.userComparator.Compare(parseInternalKey(a), parseInternalKey(b))
+//	return res
+//}
 
 func newInternalComparator(comparator cmp.Comparator) InternalComparator {
 	return InternalComparator{userComparator: comparator}
@@ -52,6 +60,7 @@ type MemTable struct {
 	table      *Table
 	comparator cmp.Comparator
 	wal        *WalFile
+	vlogCount  int32
 	ref        int32
 	state      int32
 }
@@ -90,9 +99,16 @@ func (mem *MemTable) Set(entry *utils.Entry) error {
 			return err
 		}
 	}
-	//  ------------------------    ---------------------
-	// |  `key_size` | key | tag |   | value_size | value |
-	//  -----------------------    ---------------------
+	mem.set(entry)
+
+	return nil
+}
+
+//  ------------------------    ---------------------
+// |  `key_size` | key | tag |   | value_size | value |
+//  -----------------------    ---------------------
+func (mem *MemTable) set(entry *utils.Entry) error {
+
 	mem.table.Add(buildInternalKey(entry.Key, entry.Seq), entry.Value)
 
 	return nil
@@ -101,7 +117,9 @@ func (mem *MemTable) Set(entry *utils.Entry) error {
 // buildInterKey build internal key
 //
 //	----------------------------
+//
 // |  key_size | key | tag |
+//
 //	---------------------------
 func buildInternalKey(key []byte, seq uint64) []byte {
 
@@ -123,22 +141,7 @@ func buildInternalKey(key []byte, seq uint64) []byte {
 }
 
 func (mem *MemTable) Get(key []byte, seq uint64) (*utils.Entry, error) {
-	// codec.VarintLength(uint64(internal_key_size)) + internal_key_size
 
-	//internal_key_size := len(key) + 8
-	//buf := make([]byte, codec.VarintLength(uint64(internal_key_size))+internal_key_size)
-	//off := codec.EncodeVarint32(buf, uint32(internal_key_size))
-	////userKeyOff = off
-	//
-	//copy(buf[off:], key)
-	//off += len(key)
-	//copy(buf[off:], convert.U64ToBytes(seq<<8|0x1))
-
-	// off := codec.EncodeVarint32(buf, codec.VarintLength(uint64(internal_key_size)))
-
-	// internalKey := append(convert.U64ToBytes(seq), key...)
-	//fmt.Println(string(buf))
-	//v := mem.table.Search(buf)
 	buf := buildInternalKey(key, seq)
 	it := mem.table.NewIterator()
 	defer it.Close()
@@ -154,6 +157,7 @@ func (mem *MemTable) Get(key []byte, seq uint64) (*utils.Entry, error) {
 			Value: it.Value(),
 			Seq:   parseSeq(it.Key()),
 		}
+
 		return v, nil
 	}
 	return nil, errs.ErrKeyNotFound
@@ -178,12 +182,17 @@ func mtFilePath(dir string, fid uint64) string {
 	return filepath.Join(dir, fmt.Sprintf("%05d%s", fid, walFileExt))
 }
 
+func mtvFilePath(dir string, fid uint64) string {
+	return filepath.Join(dir, fmt.Sprintf("%05d%s", fid, utils.VLOG_FILE_EXT))
+}
+
 func (m *MemTable) recoveryMemTable(opt *utils.Options) func(*utils.Entry) error {
 	return func(e *utils.Entry) error {
 		//  ------------------------    ---------------------
 		// |  key_size | key | tag |   | value_size | value |
 		//  -----------------------    ---------------------
 		return m.table.Add(buildInternalKey(e.Key, e.Seq), e.Value)
+		//return m.set(e)
 	}
 }
 
@@ -245,7 +254,7 @@ func parseKey(internalKey []byte) []byte {
 	if len(internalKey) < 8 {
 		return nil
 	}
-	keySz := codec.DecodeVarint32(internalKey[0:4])
+	keySz := codec.DecodeVarint32(internalKey[0:5])
 	off := codec.VarintLength(uint64(keySz))
 	return internalKey[off : len(internalKey)-8]
 }
@@ -254,7 +263,7 @@ func parseInternalKey(key []byte) []byte {
 	if len(key) < 4 {
 		return nil
 	}
-	keySz := codec.DecodeVarint32(key[0:4])
+	keySz := codec.DecodeVarint32(key[0:5])
 	off := codec.VarintLength(uint64(keySz))
 	return key[off:]
 }

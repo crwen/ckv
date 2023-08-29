@@ -9,6 +9,7 @@ import (
 
 const (
 	ManifestFilename        = "MANIFEST"
+	VManifestFilename       = "VMANIFEST"
 	ManifestRewriteFilename = "REWRITEMANIFEST"
 )
 
@@ -28,6 +29,20 @@ type FileMetaData struct {
 	fileSize     uint64 // file size in bytes
 	largest      []byte // largest key served by table
 	smallest     []byte // smallest key served by table
+}
+
+type VFileMetaData struct {
+	sstId    uint64
+	fileSize uint64 // file size in bytes
+	level    int
+	largest  []byte // largest key served by table
+	smallest []byte // smallest key served by table
+}
+
+type VFileGroupMetaData struct {
+	sstId    uint64
+	fileSize uint64 // file size in bytes
+	vfids    []uint64
 }
 
 func (meta *FileMetaData) UpdateMeta(t *sstable.Table) {

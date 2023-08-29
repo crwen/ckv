@@ -39,3 +39,7 @@ func FID(name string) uint64 {
 func FileNameSSTable(dir string, id uint64) string {
 	return filepath.Join(dir, fmt.Sprintf("%05d.sst", id))
 }
+
+func FileNameVLog(dir string, id uint64) string {
+	return filepath.Join(dir, fmt.Sprintf("%05d.vlog", id))
+}

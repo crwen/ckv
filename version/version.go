@@ -1,9 +1,12 @@
 package version
 
 import (
+	"bytes"
 	"ckv/utils"
 	"encoding/binary"
+	"io"
 	"os"
+	"sync"
 )
 
 const (
@@ -11,44 +14,44 @@ const (
 )
 
 type Version struct {
-	opt    *utils.Options
-	f      *os.File
-	levels [][]*FileMetaData   // level -> table
-	tables map[uint64]struct{} // fid -> table
+	opt *utils.Options
+	f   *os.File
+	vf  *os.File
 
 	//refs int
 	vset *VersionSet
 	next *Version
 	prev *Version
 	//files []map[uint64]*FileMetaData
-	files [][]*FileMetaData
+	files  [][]*FileMetaData
+	vfiles [][]*VFileGroupMetaData
+	sync.RWMutex
 }
 
 func NewVersion(opt *utils.Options) *Version {
 	//files := make([]map[uint64]*FileMetaData, opt.MaxLevelNum)
 	files := make([][]*FileMetaData, opt.MaxLevelNum)
+	vfiles := make([][]*VFileGroupMetaData, opt.MaxLevelNum)
 	for i := 0; i < opt.MaxLevelNum; i++ {
 		//files[i] = map[uint64]*FileMetaData{}
 		files[i] = make([]*FileMetaData, 0)
+		vfiles[i] = make([]*VFileGroupMetaData, 0)
 	}
 	return &Version{
-		opt:    opt,
-		levels: make([][]*FileMetaData, opt.MaxLevelNum),
-		files:  files,
+		opt:     opt,
+		files:   files,
+		vfiles:  vfiles,
+		RWMutex: sync.RWMutex{},
 	}
 }
 
-func (v *Version) log(level int, fileMetaData *FileMetaData, op uint16) {
-	//switch op {
-	//case VersionEdit_DELETE:
-	//case VersionEdit_CREATE:
-	//
-	//}
+func (v *Version) log(level int, fileMetaData *FileMetaData, op byte) {
 
-	buf := make([]byte, 12)
-	binary.BigEndian.PutUint16(buf[0:2], op)
-	binary.BigEndian.PutUint16(buf[2:4], uint16(level))
-	binary.BigEndian.PutUint64(buf[4:12], fileMetaData.id)
+	buf := make([]byte, 11)
+	//binary.BigEndian.PutUint16(buf[0:1], op)
+	buf[0] = op
+	binary.BigEndian.PutUint16(buf[1:3], uint16(level))
+	binary.BigEndian.PutUint64(buf[3:11], fileMetaData.id)
 	if _, err := v.f.Write(buf); err != nil {
 		panic(err)
 	}
@@ -63,17 +66,79 @@ func (v *Version) log(level int, fileMetaData *FileMetaData, op uint16) {
 		panic(err)
 	}
 
-	//smallest := codec.EncodeKey(fileMetaData.smallest)
-	//largest := codec.EncodeKey(fileMetaData.largest)
-	//if _, err := v.f.Write(smallest); err != nil {
-	//	panic(err)
-	//}
-	//if _, err := v.f.Write(largest); err != nil {
-	//	panic(err)
-	//}
-	//log.Printf("write sst %d to level %d. smallest: %s, largest: %s\n", fileMetaData.id, level,
-	//	string(fileMetaData.smallest), string(fileMetaData.largest))
+}
 
+func (v *Version) readLog() {
+
+	magic := []byte(VersionEdit_BEGIN_MAGIC)
+	buf := make([]byte, 2+len(magic))
+	binary.BigEndian.PutUint16(buf[0:2], VersionEdit_BEGIN)
+	copy(buf[2:], magic)
+	if _, err := v.f.Write(buf); err != nil {
+		panic(err)
+	}
+}
+
+func (v *Version) checkBeginLog(r io.Reader) error {
+	magic := []byte(VersionEdit_BEGIN_MAGIC)
+	buf := make([]byte, len(magic))
+	_, err := io.ReadFull(r, buf)
+	if err != nil {
+		return err
+	}
+
+	if bytes.Compare(buf, magic) != 0 {
+		return io.EOF
+	}
+	return nil
+}
+
+func (v *Version) checkEndLog(r io.Reader) error {
+	magic := []byte(VersionEdit_END_MAGIC)
+	buf := make([]byte, len(magic))
+	_, err := io.ReadFull(r, buf)
+	if err != nil {
+		return err
+	}
+	if bytes.Compare(buf, magic) != 0 {
+		return io.EOF
+	}
+	return nil
+}
+
+func (v *Version) logBegin() {
+	magic := []byte(VersionEdit_BEGIN_MAGIC)
+	buf := make([]byte, 1+len(magic))
+	buf[0] = VersionEdit_BEGIN
+	//binary.BigEndian.PutUint16(buf[0:2], VersionEdit_BEGIN)
+	copy(buf[1:], magic)
+	if _, err := v.f.Write(buf); err != nil {
+		panic(err)
+	}
+}
+
+func (v *Version) logEnd() {
+	magic := []byte(VersionEdit_END_MAGIC)
+	buf := make([]byte, 1+len(magic))
+	buf[0] = VersionEdit_END
+	//binary.BigEndian.PutUint16(buf[0:2], VersionEdit_BEGIN)
+	copy(buf[1:], magic)
+	if _, err := v.f.Write(buf); err != nil {
+		panic(err)
+	}
+}
+
+func (v *Version) vlog(level int, fileMetaData *FileMetaData, op uint16) {
+
+	// | op | level | fid |
+	buf := make([]byte, 12)
+	binary.BigEndian.PutUint16(buf[0:2], op)
+	binary.BigEndian.PutUint16(buf[2:4], uint16(level))
+	binary.BigEndian.PutUint64(buf[4:12], fileMetaData.id)
+
+	if _, err := v.f.Write(buf); err != nil {
+		panic(err)
+	}
 }
 
 func (v *Version) deleteFile(level uint16, meta *FileMetaData) {
@@ -108,8 +173,8 @@ func (v *Version) pickCompactionLevel() int {
 			baseLevel = i
 		}
 	}
-	if bestScore < 0.5 {
-		if maxLevelScore > 0.6 {
+	if bestScore < 0.6 {
+		if maxLevelScore > 0.5 {
 			return v.opt.MaxLevelNum - 1
 		} else if len(v.files[0]) > L0_CompactionTrigger/2 {
 			return 0
