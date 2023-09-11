@@ -1,16 +1,17 @@
 package SimpleKV
 
 import (
+	"sync"
+
 	"ckv/lsm"
 	"ckv/utils"
 	"ckv/utils/errs"
-	"sync"
 )
 
 type DB struct {
-	sync.RWMutex
 	opt *utils.Options
 	lsm *lsm.LSM
+	sync.RWMutex
 }
 
 func (db *DB) Set(data *utils.Entry) error {
@@ -18,10 +19,11 @@ func (db *DB) Set(data *utils.Entry) error {
 		return errs.ErrEmptyKey
 	}
 
-	//data.Key = codec.KeyWithTs(data.Key, uint64(time.Now().Unix()))
+	// data.Key = codec.KeyWithTs(data.Key, uint64(time.Now().Unix()))
 
 	return db.lsm.Set(data)
 }
+
 func (db *DB) Get(key []byte) (*utils.Entry, error) {
 	if len(key) == 0 {
 		return nil, errs.ErrEmptyKey

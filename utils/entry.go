@@ -1,16 +1,17 @@
 package utils
 
 import (
-	"ckv/utils/convert"
 	"encoding/binary"
 	"time"
+
+	"ckv/utils/convert"
 )
 
 type ValueStruct struct {
-	Meta      byte
 	Value     []byte
 	Seq       uint64
 	ExpiresAt uint64
+	Meta      byte
 }
 
 func EncodeValue(vs *ValueStruct) []byte {
@@ -44,8 +45,8 @@ func (vs *ValueStruct) DecodeValue(buf []byte) {
 	vs.Value = buf[1+sz:]
 }
 
-//对value进行编码，并将编码后的字节写入byte
-//这里将过期时间和value的值一起编码
+// 对value进行编码，并将编码后的字节写入byte
+// 这里将过期时间和value的值一起编码
 func (vs *ValueStruct) EncodeValue(b []byte) uint32 {
 	b[0] = vs.Meta
 	sz := binary.PutUvarint(b[1:], vs.ExpiresAt)
@@ -64,7 +65,7 @@ func sizeVarint(x uint64) (n int) {
 	return n
 }
 
-//Entry _ 最外层写入的结构体
+// Entry _ 最外层写入的结构体
 type Entry struct {
 	Key       []byte
 	Value     []byte

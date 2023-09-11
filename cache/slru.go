@@ -1,9 +1,12 @@
 package cache
 
 type segmentedLRU struct {
-	protectedCap, probationCap   int
-	protected, probation         *List
-	protectedSize, probationSize int
+	protected     *List
+	probation     *List
+	protectedCap  int
+	probationCap  int
+	protectedSize int
+	probationSize int
 }
 
 type sNode struct {
@@ -46,13 +49,12 @@ func (slru *segmentedLRU) evict(status int) *Node {
 
 func (slru *segmentedLRU) remove(sevict *Node, status int) *Node {
 	if status == PROBATION {
-		return slru.probation.Remove(sevict)
 		slru.probationSize--
+		return slru.probation.Remove(sevict)
 	} else {
-		return slru.protected.Remove(sevict)
 		slru.protectedSize--
+		return slru.protected.Remove(sevict)
 	}
-	return nil
 }
 
 func (slru *segmentedLRU) put2Head(node *Node, to int) {

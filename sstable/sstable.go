@@ -1,11 +1,12 @@
 package sstable
 
 import (
-	"ckv/file"
-	"ckv/utils/errs"
 	"io"
 	"os"
 	"sync"
+
+	"ckv/file"
+	"ckv/utils/errs"
 )
 
 // SSTable 文件的内存封装
@@ -13,12 +14,11 @@ type SSTable struct {
 	lock           *sync.RWMutex
 	f              *file.MmapFile
 	indexBlock     *IndexBlock
+	minKey         []byte
+	maxKey         []byte
+	fileSize       uint64
+	fid            uint64
 	hasBloomFilter bool
-
-	fileSize uint64
-	fid      uint64
-	minKey   []byte
-	maxKey   []byte
 }
 
 func (ss *SSTable) read(off, sz int) ([]byte, error) {
@@ -89,6 +89,7 @@ func (ss *SSTable) GetMin() []byte {
 func (ss *SSTable) SetMax(key []byte) {
 	ss.maxKey = key
 }
+
 func (ss *SSTable) GetMax() []byte {
 	return ss.maxKey
 }

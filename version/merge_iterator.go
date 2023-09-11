@@ -1,17 +1,18 @@
 package version
 
 import (
+	"sort"
+
 	"ckv/sstable"
 	"ckv/utils"
 	"ckv/utils/cmp"
-	"sort"
 )
 
 type MergeIterator struct {
-	list []sstable.TableIterator
 	it   utils.Item
-	curr sstable.TableIterator
 	cmp  cmp.Comparator
+	curr sstable.TableIterator
+	list []sstable.TableIterator
 }
 
 func NewMergeIterator(iters []sstable.TableIterator, cmp cmp.Comparator) *MergeIterator {
@@ -76,7 +77,7 @@ func (iter *MergeIterator) Next() {
 	//	}
 	//}
 	iter.curr = iter.list[n]
-	//iter.list[n].Next()
+	// iter.list[n].Next()
 }
 
 func (iter *MergeIterator) Valid() bool {
@@ -121,7 +122,7 @@ func (iter *MergeIterator) Close() error {
 }
 
 func (iter *MergeIterator) Seek(key []byte) {
-	//TODO implement me
+	// TODO implement me
 	panic("implement me")
 }
 

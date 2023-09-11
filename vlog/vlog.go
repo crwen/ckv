@@ -3,14 +3,15 @@ package vlog
 import (
 	"bufio"
 	"bytes"
+	"io"
+	"os"
+	"sync"
+
 	"ckv/file"
 	"ckv/utils"
 	"ckv/utils/codec"
 	"ckv/utils/convert"
 	"ckv/utils/errs"
-	"io"
-	"os"
-	"sync"
 )
 
 // VLogFile
@@ -32,9 +33,9 @@ type VLogHeader struct {
 }
 
 type VLogRecord struct {
-	VLogHeader
 	key   []byte
 	value []byte
+	VLogHeader
 }
 
 // OpenvlogFile _
@@ -122,8 +123,7 @@ func (vlog *VLogFile) ReadRecord(pos uint32) (*VLogRecord, int, error) {
 }
 
 func (vlog *VLogFile) readRecord(reader *bufio.Reader) (*VLogRecord, int, error) {
-
-	var record = &VLogRecord{}
+	record := &VLogRecord{}
 	checksum := make([]byte, 4)
 	if _, err := io.ReadFull(reader, checksum); err != nil {
 		return nil, 0, err
@@ -156,7 +156,7 @@ func (vlog *VLogFile) readRecord(reader *bufio.Reader) (*VLogRecord, int, error)
 		record.types = types
 	}
 
-	//io.ReadFull(reader, buf)
+	// io.ReadFull(reader, buf)
 	if _, err := io.ReadFull(reader, buf[length:]); err != nil {
 		return nil, 0, err
 	}
@@ -180,8 +180,7 @@ func (vlog *VLogFile) ReadRecordBytes(pos uint32) ([]byte, int, error) {
 }
 
 func (vlog *VLogFile) readRecordBytes(reader *bufio.Reader) ([]byte, int, error) {
-
-	var record = &VLogRecord{}
+	record := &VLogRecord{}
 	checksum := make([]byte, 4)
 	if _, err := io.ReadFull(reader, checksum); err != nil {
 		return nil, 0, err
@@ -214,7 +213,7 @@ func (vlog *VLogFile) readRecordBytes(reader *bufio.Reader) ([]byte, int, error)
 		record.types = types
 	}
 
-	//io.ReadFull(reader, buf)
+	// io.ReadFull(reader, buf)
 	if _, err := io.ReadFull(reader, buf[length:]); err != nil {
 		return nil, 0, err
 	}

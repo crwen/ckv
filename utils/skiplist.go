@@ -1,7 +1,6 @@
 package utils
 
 import (
-	"ckv/utils/cmp"
 	"fmt"
 	"log"
 	"math/rand"
@@ -9,6 +8,8 @@ import (
 	"sync/atomic"
 
 	"github.com/pkg/errors"
+
+	"ckv/utils/cmp"
 )
 
 const (
@@ -21,21 +22,19 @@ var (
 )
 
 type SkipList struct {
+	comparator cmp.Comparator
 	head       *Node
-	maxHeight  int
-	ref        int32
 	rand       *rand.Rand
 	arena      *Arena
-	comparator cmp.Comparator
+	maxHeight  int
 	lock       sync.RWMutex
+	ref        int32
 }
 
 type Node struct {
-	//Entry     *Entry
+	next        [kMaxHeight]*Node
 	keyOffset   uint32
 	valueOffset uint32
-	//seq         uint64
-	next [kMaxHeight]*Node
 }
 
 // IncrRef increase the ref by 1
@@ -63,24 +62,23 @@ func NewNode(arena *Arena, key, value []byte, height int) *Node {
 	keyOff := arena.putData(key)
 	valueOff := arena.putData(value)
 
-	//kw := arena.PutKey(entry.Key, offset)
-	//sequence := time.Now().UnixMilli()
-	//sequence := atomic.AddUint64(&seq, 1)
-	//sw := arena.PutSeq(uint64(entry.Seq), offset+kw)
-	//arena.PutVal(entry.Value, offset+sw+kw)
-	//arena.PutVal(entry.Value, offset+kw)
+	// kw := arena.PutKey(entry.Key, offset)
+	// sequence := time.Now().UnixMilli()
+	// sequence := atomic.AddUint64(&seq, 1)
+	// sw := arena.PutSeq(uint64(entry.Seq), offset+kw)
+	// arena.PutVal(entry.Value, offset+sw+kw)
+	// arena.PutVal(entry.Value, offset+kw)
 
 	nodeOffset := arena.putNode(height)
 	node := arena.getNode(nodeOffset)
-	//node.key = &Key{keyOffset: offset, keySize: uint32(keySize)}
+	// node.key = &Key{keyOffset: offset, keySize: uint32(keySize)}
 	node.keyOffset = keyOff
-	//node.seq = uint64(entry.Seq)
+	// node.seq = uint64(entry.Seq)
 	node.valueOffset = valueOff
-	//node.valueOffset = offset + kw
-	//node.value = &Value{valueOffset: offset + kw, valueSize: uint32(valSize)}
-	//node.next = make([]*Node, height)
+	// node.valueOffset = offset + kw
+	// node.value = &Value{valueOffset: offset + kw, valueSize: uint32(valSize)}
+	// node.next = make([]*Node, height)
 	return node
-
 }
 
 func encodeValue(valOffset uint32, valSize uint32) uint64 {
@@ -92,27 +90,28 @@ func (node *Node) Next(height int) *Node {
 }
 
 func (node *Node) getKey(arena *Arena) []byte {
-	//k, _ := arena.getKey(node.keyOffset)
+	// k, _ := arena.getKey(node.keyOffset)
 	k, _ := arena.getData(node.keyOffset)
 	return k
-	//return node.key
+	// return node.key
 }
 
 func (node *Node) getValue(arena *Arena) []byte {
-	//v, _ := arena.getVal(node.valueOffset)
+	// v, _ := arena.getVal(node.valueOffset)
 	v, _ := arena.getData(node.valueOffset)
 	return v
-	//return node.value
+	// return node.value
 }
+
 func (node *Node) getSeq(arena *Arena) uint64 {
 	seq := arena.getSeq(node.valueOffset - 8)
 	return seq >> 8
-	//return 0
+	// return 0
 }
 
 func NewSkipList(arena *Arena) *SkipList {
 	list := &SkipList{
-		//head:       NewNode(arena, &Entry{Key: []byte{0}}, kMaxHeight),
+		// head:       NewNode(arena, &Entry{Key: []byte{0}}, kMaxHeight),
 		head:       NewNode(arena, []byte{0}, []byte{0}, kMaxHeight),
 		maxHeight:  0,
 		rand:       r,
@@ -125,7 +124,7 @@ func NewSkipList(arena *Arena) *SkipList {
 
 func NewSkipListWithComparator(arena *Arena, comparator cmp.Comparator) *SkipList {
 	list := &SkipList{
-		//head:       NewNode(arena, &Entry{Key: []byte{0}}, kMaxHeight),
+		// head:       NewNode(arena, &Entry{Key: []byte{0}}, kMaxHeight),
 		head:       NewNode(arena, []byte{0}, []byte{0}, kMaxHeight),
 		maxHeight:  0,
 		rand:       r,
@@ -137,7 +136,7 @@ func NewSkipListWithComparator(arena *Arena, comparator cmp.Comparator) *SkipLis
 }
 
 func (list *SkipList) Close() {
-	//list.arena = nil
+	// list.arena = nil
 	list.DecrRef()
 }
 
@@ -249,7 +248,7 @@ func (list *SkipList) PrintSkipList() {
 		for next := p.next[i]; next != nil; {
 
 			fmt.Printf("(%s, %s, %d) -> ", next.getKey(list.arena), next.getValue(list.arena), next.getSeq(list.arena))
-			//fmt.Printf("(%s, %s, %d) -> ", next.getKey(list.arena), next.getValue(list.arena), next.seq)
+			// fmt.Printf("(%s, %s, %d) -> ", next.getKey(list.arena), next.getValue(list.arena), next.seq)
 			next = next.next[i]
 		}
 		fmt.Println()
@@ -263,7 +262,7 @@ type SkipListIterator struct {
 
 func (list *SkipList) NewIterator() *SkipListIterator {
 	// increase ref first
-	//list.IncrRef()
+	// list.IncrRef()
 	list.lock.RLock()
 	return &SkipListIterator{
 		list: list,
@@ -306,8 +305,8 @@ func (iter *SkipListIterator) Item() Item {
 
 func (iter *SkipListIterator) Close() error {
 	// decrease the ref of skip list
-	//iter.list.DecrRef()
-	//iter.list.Close()
+	// iter.list.DecrRef()
+	// iter.list.Close()
 	iter.list.lock.RUnlock()
 	return nil
 }

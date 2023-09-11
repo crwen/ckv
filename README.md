@@ -103,6 +103,7 @@ We separating keys from values only when key's size is more than threshold and w
 
 eg. we compact SSTable4, SSTable6, SSTable7 in level 0 with SSTable 3 in leve1, and generate a new SSTable 8. Then all vlogs that belongs to SSTable 4, 6, 7, 8, 3 will move to new SSTable 8. When it is time to GC, we merge all vlogs in SSTable 8 to one vlog. You can see figure below.
 
+> Now, I am refactoring using Rust. You can see https://github.com/crwen/ckv-rust
 ![](./doc/img/gc.svg)
 
 reference

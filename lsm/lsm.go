@@ -1,6 +1,14 @@
 package lsm
 
 import (
+	"io/ioutil"
+	"os"
+	"sort"
+	"strconv"
+	"strings"
+	"sync"
+	"sync/atomic"
+
 	"ckv/file"
 	"ckv/sstable"
 	"ckv/utils"
@@ -9,13 +17,6 @@ import (
 	"ckv/utils/errs"
 	"ckv/version"
 	"ckv/vlog"
-	"io/ioutil"
-	"os"
-	"sort"
-	"strconv"
-	"strings"
-	"sync"
-	"sync/atomic"
 )
 
 const (
@@ -24,23 +25,19 @@ const (
 	COMPACTING = 1
 )
 
-var (
-	comparator cmp.Comparator = cmp.ByteComparator{}
-)
+var comparator cmp.Comparator = cmp.ByteComparator{}
 
 type LSM struct {
-	memTable   *MemTable
-	immutables []*MemTable
-	wal        *WalFile
-	option     *utils.Options
-	//lm         *levelManager
-	verSet *version.VersionSet
-	seq    uint64
-	//maxFID uint64
+	memTable              *MemTable
+	wal                   *WalFile
+	option                *utils.Options
+	verSet                *version.VersionSet
 	lock                  *sync.RWMutex
 	cond                  *sync.Cond
-	bgCompactionScheduled bool
 	compactState          *version.CompactStatus
+	immutables            []*MemTable
+	seq                   uint64
+	bgCompactionScheduled bool
 }
 
 // NewLSM _
@@ -53,18 +50,18 @@ func NewLSM(opt *utils.Options) *LSM {
 	lsm := &LSM{option: opt, lock: &sync.RWMutex{}}
 	lsm.cond = sync.NewCond(lsm.lock)
 	lsm.verSet, _ = version.Open(lsm.option)
-	//lsm.compactState = version.NewCompactStatus(lsm.option)
-	//lsm.lm = lsm.newLevelManager()
+	// lsm.compactState = version.NewCompactStatus(lsm.option)
+	// lsm.lm = lsm.newLevelManager()
 	// recovery
 	lsm.memTable, lsm.immutables = lsm.recovery()
-	//lsm.memTable = lsm.NewMemTable()
+	// lsm.memTable = lsm.NewMemTable()
 	go lsm.verSet.RunCompact()
 	go lsm.verSet.RunGC()
 	return lsm
 }
 
 func (lsm *LSM) IncreaseFid(delta uint64) uint64 {
-	//newFid := atomic.AddUint64(&(lsm.maxFID), delta)
+	// newFid := atomic.AddUint64(&(lsm.maxFID), delta)
 
 	return lsm.verSet.IncreaseNextFileNumber(delta)
 }
@@ -113,7 +110,7 @@ func (lsm *LSM) Get(key []byte) (*utils.Entry, error) {
 		}
 	}
 	return lsm.verSet.Get(key)
-	//return lsm.lm.Get(key)
+	// return lsm.lm.Get(key)
 }
 
 // WriteLevel0Table write immutable to sst file
@@ -125,10 +122,10 @@ func (lsm *LSM) WriteLevel0Table(immutable *MemTable) (err error) {
 	//fid := mem.wal.Fid()
 	fid := immutable.wal.Fid()
 	sstName := file.FileNameSSTable(lsm.option.WorkDir, fid)
-	//fmt.Println(fid)
+	// fmt.Println(fid)
 	// 构建一个 builder
 	builder := sstable.NewTableBuiler(lsm.option)
-	//iter := immutable.table.NewIterator()
+	// iter := immutable.table.NewIterator()
 	iter := immutable.NewMemTableIterator()
 	defer iter.Close()
 
@@ -164,12 +161,12 @@ func (lsm *LSM) WriteLevel0Table(immutable *MemTable) (err error) {
 	vlog.Close()
 	t, err := builder.Flush(sstName)
 	t.MaxKey = entry.Key
-	//t.MinKey = firstEntry.Key
+	// t.MinKey = firstEntry.Key
 	if err != nil {
 		errs.Panic(err)
 	}
 
-	//level := 0
+	// level := 0
 	level := lsm.verSet.PickLevelForMemTableOutput(t.MinKey, t.MaxKey)
 
 	lsm.verSet.AddFileMetaWithGroup(level, t)
@@ -182,7 +179,7 @@ func (lsm *LSM) rotate() {
 	lsm.lock.Lock()
 	defer lsm.lock.Unlock()
 
-	for true {
+	for {
 		if lsm.memTable.Size() <= lsm.option.MemTableSize {
 			break
 		} else if len(lsm.immutables) != 0 {
@@ -194,7 +191,6 @@ func (lsm *LSM) rotate() {
 			lsm.maybeScheduleCompaction()
 		}
 	}
-
 }
 
 func (lsm *LSM) recovery() (*MemTable, []*MemTable) {
@@ -259,7 +255,6 @@ func (lsm *LSM) openWal() *WalFile {
 }
 
 func (lsm *LSM) openVLog(fid uint64, delete bool) *vlog.VLogFile {
-
 	fileOpt := &file.Options{
 		FID:      fid,
 		FileName: mtvFilePath(lsm.option.WorkDir, fid),
@@ -278,16 +273,16 @@ func (lsm *LSM) openMemTable(fid uint64) (*MemTable, error) {
 		FID:      fid,
 		FileName: mtFilePath(lsm.option.WorkDir, fid),
 	}
-	//mt := lsm.NewMemTable()
+	// mt := lsm.NewMemTable()
 	arena := utils.NewArena()
 	mt := &MemTable{
 		table: utils.NewSkipListWithComparator(arena, lsm.option.Comparable),
 	}
 	mt.wal = OpenWalFile(fileOpt)
-	//oldSeq := lsm.seq
+	// oldSeq := lsm.seq
 	seq, _ := mt.wal.Iterate(mt.recoveryMemTable(lsm.option))
-	//atomic.CompareAndSwapUint64(&lsm.seq, oldSeq, seq)
-	//atomic.AddUint64(&lsm.seq, seq - lsm.seq)
+	// atomic.CompareAndSwapUint64(&lsm.seq, oldSeq, seq)
+	// atomic.AddUint64(&lsm.seq, seq - lsm.seq)
 	lsm.seq = seq
 	return mt, nil
 }
@@ -302,7 +297,6 @@ func (lsm *LSM) maybeScheduleCompaction() {
 	}
 	lsm.bgCompactionScheduled = true
 	go lsm.backgroundCall()
-
 }
 
 func (lsm *LSM) backgroundCall() {
@@ -326,7 +320,6 @@ func (lsm *LSM) backgroundCompaction() {
 }
 
 func (lsm *LSM) compactMem() {
-
 	for _, imm := range lsm.immutables {
 		lsm.WriteLevel0Table(imm)
 	}

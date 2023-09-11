@@ -3,13 +3,15 @@ package version
 import "ckv/sstable"
 
 type VersionEdit struct {
-	//logNumber      uint64
-	//logNumber      uint64
-	//prevFileNumber uint64
-	//nextFileNumber uint64
+	// logNumber      uint64
+	// logNumber      uint64
+	// prevFileNumber uint64
+	// nextFileNumber uint64
 
-	deletes []*TableMeta
-	adds    []*TableMeta
+	deletes  []*TableMeta
+	adds     []*TableMeta
+	vdeletes []*tableState
+	vadds    []*tableState
 }
 
 type TableMeta struct {
@@ -45,7 +47,6 @@ func (ve *VersionEdit) RecordDeleteFileMeta(level int, t *sstable.Table) {
 }
 
 func (ve *VersionEdit) DeleteFileMetas(level int, tables []*sstable.Table) {
-
 	for _, table := range tables {
 		ve.RecordDeleteFileMeta(level, table)
 	}

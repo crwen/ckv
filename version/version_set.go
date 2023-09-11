@@ -2,17 +2,18 @@ package version
 
 import (
 	"bufio"
-	"ckv/cache"
-	"ckv/sstable"
-	"ckv/utils"
-	"ckv/utils/convert"
-	"ckv/utils/errs"
 	"io"
 	"os"
 	"path/filepath"
 	"sort"
 	"sync"
 	"sync/atomic"
+
+	"ckv/cache"
+	"ckv/sstable"
+	"ckv/utils"
+	"ckv/utils/convert"
+	"ckv/utils/errs"
 )
 
 const (
@@ -25,16 +26,15 @@ const (
 )
 
 type VersionSet struct {
+	head               *Version
+	current            *Version
+	tableCache         *cache.Cache
+	info               *Statistic
+	pendingGC          *VFileMetaData
 	NextFileNumber     uint64
 	manifestFileNumber uint64
 	logNumber          uint64
-
-	head       *Version
-	current    *Version
-	tableCache *cache.Cache
-	info       *Statistic
-	lock       sync.RWMutex
-	pendingGC  *VFileMetaData
+	lock               sync.RWMutex
 }
 
 func Open(opt *utils.Options) (*VersionSet, error) {
@@ -57,15 +57,15 @@ func Open(opt *utils.Options) (*VersionSet, error) {
 func NewVersionSet(opt *utils.Options) *VersionSet {
 	manifestPath := filepath.Join(opt.WorkDir, ManifestFilename)
 	vmanifestPath := filepath.Join(opt.WorkDir, VManifestFilename)
-	f, err := os.OpenFile(manifestPath, os.O_CREATE|os.O_RDWR|os.O_APPEND, 0666)
+	f, err := os.OpenFile(manifestPath, os.O_CREATE|os.O_RDWR|os.O_APPEND, 0o666)
 	if err != nil {
 		return nil
 	}
-	//vs := &VersionSet{Lock: sync.RWMutex{}}
+	// vs := &VersionSet{Lock: sync.RWMutex{}}
 
 	current := NewVersion(opt)
 	current.f = f
-	vf, err := os.OpenFile(vmanifestPath, os.O_CREATE|os.O_RDWR|os.O_APPEND, 0666)
+	vf, err := os.OpenFile(vmanifestPath, os.O_CREATE|os.O_RDWR|os.O_APPEND, 0o666)
 	if err != nil {
 		return nil
 	}
@@ -115,7 +115,7 @@ func (vs *VersionSet) Replay() {
 
 	for {
 		for {
-			var flag = false
+			flag := false
 			op, err := r.ReadByte()
 			if err != nil {
 				break
@@ -226,7 +226,6 @@ func (vs *VersionSet) AddFileMetaWithGroup(level int, t *sstable.Table) {
 }
 
 func (vs *VersionSet) addFileMeta(level int, t *sstable.Table) {
-
 	meta := &FileMetaData{
 		id:       t.Fid(),
 		largest:  t.MaxKey,
@@ -258,7 +257,7 @@ func (vs *VersionSet) DeleteFileMeta(level, targetLevel int, t *sstable.Table) {
 			break
 		}
 	}
-	//vs.tableCache.AddIndex(t.Fid(), t.Index())
+	// vs.tableCache.AddIndex(t.Fid(), t.Index())
 }
 
 func (vs *VersionSet) FindTable(fid uint64) *sstable.Table {
@@ -318,7 +317,7 @@ func (vs *VersionSet) searchL0SST(key []byte) (*utils.Entry, error) {
 
 func (vs *VersionSet) searchLNSST(key []byte) (*utils.Entry, error) {
 	current := vs.current
-	//cmp := current.opt.Comparable
+	// cmp := current.opt.Comparable
 	for level := 1; level < current.opt.MaxLevelNum; level++ {
 		idx := current.findFile(current.files[level], key)
 		if idx >= len(current.files[level]) {
@@ -334,13 +333,11 @@ func (vs *VersionSet) searchLNSST(key []byte) (*utils.Entry, error) {
 }
 
 func (vs *VersionSet) IncreaseNextFileNumber(delta uint64) uint64 {
-
 	newFid := atomic.AddUint64(&(vs.NextFileNumber), delta)
 	return newFid
 }
 
 func (vs *VersionSet) AddNewVLogGroup(fid uint64) {
-
 	vs.info.AddNewVLogWithGroup(fid)
 	vs.info.SetTableState(fid, NORMAL)
 }

@@ -104,9 +104,11 @@ func (mem *MemTable) Set(entry *utils.Entry) error {
 	return nil
 }
 
-//  ------------------------    ---------------------
+//	------------------------    ---------------------
+//
 // |  `key_size` | key | tag |   | value_size | value |
-//  -----------------------    ---------------------
+//
+//	-----------------------    ---------------------
 func (mem *MemTable) set(entry *utils.Entry) error {
 
 	mem.table.Add(buildInternalKey(entry.Key, entry.Seq), entry.Value)

@@ -6,10 +6,10 @@ type Replacer interface {
 }
 
 type Node struct {
-	key   string
 	value interface{}
 	next  *Node
 	prev  *Node
+	key   string
 }
 
 type List struct {

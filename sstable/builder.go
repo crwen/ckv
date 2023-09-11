@@ -1,31 +1,32 @@
 package sstable
 
 import (
-	"ckv/file"
-	"ckv/utils"
-	"ckv/utils/codec"
-	"ckv/utils/convert"
-	"ckv/utils/errs"
 	"errors"
 	"fmt"
 	"math"
 	"os"
 
 	"github.com/golang/protobuf/proto"
+
+	"ckv/file"
+	"ckv/utils"
+	"ckv/utils/codec"
+	"ckv/utils/convert"
+	"ckv/utils/errs"
 )
 
 type tableBuilder struct {
-	sstSize       int64
 	curBlock      *Block
 	opt           *utils.Options
-	blockList     []*Block
 	index         *IndexBlock
-	keyCount      uint32
+	blockList     []*Block
 	keyHashes     []uint32
-	maxVersion    uint64
 	baseKey       []byte
+	sstSize       int64
+	maxVersion    uint64
 	staleDataSize int
 	estimateSz    int64
+	keyCount      uint32
 }
 
 type buildData struct {
@@ -101,7 +102,8 @@ func (tb *tableBuilder) Flush(tableName string) (t *Table, err error) {
 	t.ss = OpenSStable(&file.Options{
 		FileName: tableName,
 		Flag:     os.O_CREATE | os.O_RDWR,
-		MaxSz:    int(bd.size)})
+		MaxSz:    int(bd.size),
+	})
 	t.ss.SetIndex(tb.index)
 	t.ss.SetMin(tb.blockList[0].BaseKey)
 	buf := make([]byte, bd.size)
@@ -206,7 +208,6 @@ func (tb *tableBuilder) finishBlock() {
 	tb.blockList = append(tb.blockList, tb.curBlock)
 	tb.keyCount += uint32(len(tb.curBlock.EntryOffsets))
 	tb.curBlock = nil // 表示当前block 已经被序列化到内存
-	return
 }
 
 func (tb *tableBuilder) allocate(need int) []byte {
@@ -288,7 +289,6 @@ func (tb *tableBuilder) buildIndex(bloom []byte) ([]byte, uint32) {
 }
 
 func (tb *tableBuilder) finishIndexBlock(index *IndexBlock, size int) []byte {
-
 	buf, _ := proto.Marshal(index)
 
 	//buf := make([]byte, size)

@@ -1,34 +1,35 @@
 package sstable
 
 import (
-	"ckv/file"
-	"ckv/utils"
-	"ckv/utils/codec"
-	"ckv/utils/convert"
-	"ckv/utils/errs"
-	"ckv/vlog"
 	"fmt"
-	"github.com/golang/protobuf/proto"
-	"github.com/pkg/errors"
 	"io"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync"
 	"sync/atomic"
+
+	"github.com/golang/protobuf/proto"
+	"github.com/pkg/errors"
+
+	"ckv/file"
+	"ckv/utils"
+	"ckv/utils/codec"
+	"ckv/utils/convert"
+	"ckv/utils/errs"
+	"ckv/vlog"
 )
 
 // sst 的内存形式
 type Table struct {
-	sync.RWMutex
-	ss *SSTable
-	//lm     *levelManager
-	fid          uint64
+	ss           *SSTable
 	opt          *utils.Options
 	MinKey       []byte
 	MaxKey       []byte
-	ref          int32 // For file garbage collection. Atomic.
 	pendingVlogs []uint64
+	fid          uint64
+	sync.RWMutex
+	ref int32
 }
 
 func newTable(opt *utils.Options, fid uint64) *Table {
@@ -74,15 +75,15 @@ func (t *Table) DecrRef(fn func() error) error {
 }
 
 func (t *Table) Delete() error {
-	//t.Lock()
-	//defer t.Unlock()
+	// t.Lock()
+	// defer t.Unlock()
 	return t.ss.Detele()
 }
 
 func (t *Table) Rename(filename string) (bool, error) {
-	//t.Lock()
-	//defer t.Unlock()
-	//return t.ss.Detele()
+	// t.Lock()
+	// defer t.Unlock()
+	// return t.ss.Detele()
 	name := t.ss.f.Fd.Name()
 	if !strings.HasSuffix(filename, ".bak") {
 		return false, nil
@@ -99,19 +100,19 @@ func (t *Table) Rename(filename string) (bool, error) {
 }
 
 func (t *Table) Serach(key []byte) (entry *utils.Entry, err error) {
-	//t.RLock()
-	//defer t.RUnlock()
+	// t.RLock()
+	// defer t.RUnlock()
 
 	iter := t.NewIterator(t.opt)
 	defer iter.Close()
-	//iter.seekToFirst()
+	// iter.seekToFirst()
 	iter.Seek(key)
 	//err = iter.err
 	//if err != nil {
 	//	return nil, err
 	//}
 	if !iter.Valid() {
-		//iter.Close()
+		// iter.Close()
 		return nil, errs.ErrKeyNotFound
 	}
 	if t.Compare(iter.Item().Entry().Key, key) == 0 {
@@ -131,14 +132,13 @@ func (t *Table) Serach(key []byte) (entry *utils.Entry, err error) {
 			e.Value = val
 			vlog.Close()
 		}
-		//iter.Close()
+		// iter.Close()
 		return e, nil
 	}
 
 	// TODO cache block
 
 	return nil, errs.ErrKeyNotFound
-
 }
 
 // findGreaterOrEqual
@@ -190,19 +190,18 @@ func (t *Table) readBlock(idx int) (*Block, error) {
 	offset := blockOffset.Offset
 	size := blockOffset.Len
 
-	//buf := make([]byte, size)
+	// buf := make([]byte, size)
 	buf, err := f.Bytes(int(offset), int(size))
 	if err != nil {
-
 	}
-	//f.ReadAt(buf, int64(offset))
+	// f.ReadAt(buf, int64(offset))
 
 	block.Offset = int(offset)
 	block.Data = buf
 
 	offset = block.readEntryOffsets(buf)
 	block.entriesIndexStart = int(offset)
-	//buf = buf[:offset]
+	// buf = buf[:offset]
 
 	// TODO cache block
 
@@ -210,7 +209,6 @@ func (t *Table) readBlock(idx int) (*Block, error) {
 }
 
 func (t *Table) ReadIndex() (*IndexBlock, error) {
-
 	readPos := len(t.ss.f.Data) - 4
 	checksumLen := convert.BytesToU32(t.ss.readCheckError(readPos, 4)) // checksum length
 	readPos -= int(checksumLen)
@@ -238,11 +236,11 @@ func (t *Table) Size() uint64 {
 
 type TableIterator struct {
 	it        utils.Item
+	err       error
 	opt       *utils.Options
 	t         *Table
-	blockPos  int
 	blockIter *BlockIterator
-	err       error
+	blockPos  int
 }
 
 func (iter *TableIterator) GetFID() uint64 {
@@ -250,7 +248,7 @@ func (iter *TableIterator) GetFID() uint64 {
 }
 
 func (t *Table) NewIterator(options *utils.Options) TableIterator {
-	//t.RLock()
+	// t.RLock()
 	t.IncrRef()
 	return TableIterator{
 		opt:       options,
@@ -300,7 +298,7 @@ func (iter *TableIterator) Item() utils.Item {
 }
 
 func (iter *TableIterator) Close() error {
-	//iter.t.RUnlock()
+	// iter.t.RUnlock()
 	iter.blockIter.Close()
 	return iter.t.DecrRef(nil)
 }

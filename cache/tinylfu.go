@@ -1,22 +1,22 @@
 package cache
 
 import (
-	"github.com/dgryski/go-metro"
 	"sync"
+
+	"github.com/dgryski/go-metro"
 )
 
 type TinyLFU struct {
+	m        map[string]*Node
+	cmSketch *cmSketch
+	list     *List
+	capacity int
 	sync.RWMutex
-	m         map[string]*Node
-	cmSketch  *cmSketch
-	list      *List
-	capacity  int
 	threshold int32
 	w         int32
 }
 
 func NewTinyLFU(capacity int) *TinyLFU {
-
 	return &TinyLFU{
 		RWMutex:   sync.RWMutex{},
 		m:         make(map[string]*Node),
@@ -75,8 +75,8 @@ func (lfu *TinyLFU) Put(key string, value interface{}) {
 			lfu.m[key] = newNode
 		}
 		return
-		//removed := lfu.list.RemoveLast()
-		//delete(lfu.m, removed.key)
+		// removed := lfu.list.RemoveLast()
+		// delete(lfu.m, removed.key)
 	}
 
 	lfu.list.InsertLast(newNode)
@@ -85,7 +85,6 @@ func (lfu *TinyLFU) Put(key string, value interface{}) {
 	lfu.list.InsertAfter(nd, newNode)
 
 	lfu.m[key] = newNode
-
 }
 
 func (lfu *TinyLFU) findNearer(node *Node) *Node {

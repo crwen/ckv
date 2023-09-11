@@ -1,27 +1,25 @@
 package sstable
 
 import (
+	"io"
+	"unsafe"
+
 	"ckv/utils"
 	"ckv/utils/cmp"
 	"ckv/utils/codec"
 	"ckv/utils/convert"
-	"io"
-	"unsafe"
 )
 
 type Block struct {
-	Offset            int
 	checksum          []byte
+	Data              []byte
+	BaseKey           []byte
+	EntryOffsets      []uint32
+	Offset            int
 	entriesIndexStart int
 	checksumLen       int
-
-	Data []byte
-	//restart []uint32
-
-	BaseKey      []byte
-	EntryOffsets []uint32
-	End          int
-	EstimateSz   int64
+	End               int
+	EstimateSz        int64
 }
 
 func (b *Block) readEntry(buf []byte, sz uint32) (key, value []byte, seq uint64) {
@@ -54,7 +52,7 @@ func (b *Block) readEntryOffsets(buf []byte) uint32 {
 	offset -= b.checksumLen
 	b.checksum = buf[offset : offset+b.checksumLen] // read checksum
 	if err := codec.VerifyChecksum(buf[:offset], b.checksum); err != nil {
-		//return nil, err
+		// return nil, err
 	}
 
 	// read entry offsets and length
@@ -66,8 +64,7 @@ func (b *Block) readEntryOffsets(buf []byte) uint32 {
 	// read kv data
 	b.Data = buf[:offset]
 	return uint32(offset)
-	//buf = buf[:offset]
-
+	// buf = buf[:offset]
 }
 
 type Header struct {
@@ -89,18 +86,18 @@ func (h *Header) decode(buf []byte) {
 }
 
 type BlockIterator struct {
+	err          error
+	it           utils.Item
+	cmp          cmp.Comparator
 	block        *Block
 	data         []byte
 	baseKey      []byte
 	entryOffsets []uint32
-	end          int
-	estimateSz   int64
-	err          error
-	idx          int
 	key          []byte
 	val          []byte
-	it           utils.Item
-	cmp          cmp.Comparator
+	end          int
+	estimateSz   int64
+	idx          int
 }
 
 func (iter *BlockIterator) setBlock(b *Block, cmp cmp.Comparator) {
@@ -108,7 +105,7 @@ func (iter *BlockIterator) setBlock(b *Block, cmp cmp.Comparator) {
 	iter.err = nil
 	iter.idx = -1
 	iter.baseKey = iter.baseKey[:0]
-	//itr.prevOverlap = 0
+	// itr.prevOverlap = 0
 	iter.key = iter.key[:0]
 	iter.val = iter.val[:0]
 	// Drop the index from the block. We don't need it anymore.
@@ -160,6 +157,7 @@ func (iter *BlockIterator) Item() utils.Item {
 func (iter *BlockIterator) Close() error {
 	return nil
 }
+
 func (itr *BlockIterator) Error() error {
 	return itr.err
 }

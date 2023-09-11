@@ -1,16 +1,17 @@
 package version
 
 import (
-	"ckv/file"
-	"ckv/sstable"
-	"ckv/utils"
-	"ckv/utils/errs"
 	"fmt"
 	"log"
 	"math/rand"
 	"sort"
 	"sync"
 	"time"
+
+	"ckv/file"
+	"ckv/sstable"
+	"ckv/utils"
+	"ckv/utils/errs"
 )
 
 const (
@@ -18,9 +19,9 @@ const (
 )
 
 type CompactStatus struct {
-	sync.RWMutex
-	levels []*levelCompactStatus
 	tables map[uint64]struct{}
+	levels []*levelCompactStatus
+	sync.RWMutex
 }
 
 type levelCompactStatus struct {
@@ -41,30 +42,30 @@ func NewCompactStatus(option *utils.Options) *CompactStatus {
 }
 
 type Compaction struct {
-	baseLevel   int
-	targetLevel int
 	base        []*FileMetaData
 	target      []*FileMetaData
+	baseLevel   int
+	targetLevel int
 }
 
 func (vs *VersionSet) RunCompact() int {
 	randomDelay := time.NewTimer(time.Duration(rand.Int31n(1000)) * time.Millisecond)
-	//select {
-	//case <- randomDelay.C:
+	// select {
+	// case <- randomDelay.C:
 	<-randomDelay.C
-	//TODO close case <- close:
+	// TODO close case <- close:
 
 	//}
 
 	ticker := time.NewTicker(3000 * time.Millisecond)
 	defer ticker.Stop()
-	//for {
+	// for {
 
-	//select {
-	//case <- ticker.C:
+	// select {
+	// case <- ticker.C:
 	<-ticker.C
 	vs.compact(1)
-	//TODO close case <- close:
+	// TODO close case <- close:
 
 	//}
 	//}
@@ -72,7 +73,6 @@ func (vs *VersionSet) RunCompact() int {
 }
 
 func (vs *VersionSet) compact(id int) {
-
 	opt := vs.current.opt
 	c := vs.pickCompaction()
 	if c == nil || len(c.base)+len(c.target) <= 1 {
@@ -90,7 +90,7 @@ func (vs *VersionSet) compact(id int) {
 	for _, meta := range c.target {
 		id := meta.id
 		t := vs.FindTable(id)
-		//t := sstable.OpenTable(vs.current.opt, id)
+		// t := sstable.OpenTable(vs.current.opt, id)
 		iters = append(iters, t.NewIterator(opt))
 	}
 	newFid := vs.IncreaseNextFileNumber(1)
@@ -108,7 +108,7 @@ func (vs *VersionSet) compact(id int) {
 
 	sstName := file.FileNameSSTable(opt.WorkDir, newFid)
 	t, err := builder.Flush(sstName)
-	//t.MinKey = firstEntry.Key
+	// t.MinKey = firstEntry.Key
 	if err != nil {
 		errs.Panic(err)
 	}
@@ -131,7 +131,7 @@ func (vs *VersionSet) compact(id int) {
 		mergeFids = append(mergeFids, id)
 	}
 
-	//TODO: write vgroup to manifest
+	// TODO: write vgroup to manifest
 
 	// delete
 	vs.lock.Lock()
@@ -163,7 +163,6 @@ func (vs *VersionSet) compact(id int) {
 
 	log.Printf("compact from level %d to level %d. create %s. delete %d files \n",
 		c.baseLevel, c.targetLevel, sstName, len(ve.deletes))
-
 }
 
 // pickCompaction method    pick sstables to compact
@@ -190,12 +189,12 @@ func (vs *VersionSet) pickCompaction() *Compaction {
 				c.target = append(c.target, vs.current.files[c.baseLevel][i])
 			}
 		}
-		//c.target = filter(vs.current.files[c.baseLevel])
+		// c.target = filter(vs.current.files[c.baseLevel])
 
 		c.targetLevel = c.baseLevel
 		return &c
 	}
-	//c.base = append(c.base, vs.current.files[c.baseLevel]...)
+	// c.base = append(c.base, vs.current.files[c.baseLevel]...)
 	// TODO compact to more higher level
 	c.targetLevel = c.baseLevel + 1
 
@@ -207,7 +206,7 @@ func (vs *VersionSet) pickCompaction() *Compaction {
 				c.base = append(c.base, vs.current.files[c.baseLevel][i])
 			}
 		}
-		//c.base = append(c.base, vs.current.files[0]...)
+		// c.base = append(c.base, vs.current.files[0]...)
 		utils.AssertTrue(len(c.base) > 0)
 		if len(c.base) > 0 {
 			smallest, largest = c.base[0].smallest, c.base[0].largest
@@ -230,7 +229,7 @@ func (vs *VersionSet) pickCompaction() *Compaction {
 		})
 		c.base = make([]*FileMetaData, 0)
 		c.target = make([]*FileMetaData, 0)
-		var pendingGC = vs.pendingGC
+		pendingGC := vs.pendingGC
 		if pendingGC != nil {
 			if vs.pendingGC.level == c.baseLevel {
 				for i := 0; i < len(vs.current.files[c.baseLevel]); i++ {
@@ -290,7 +289,6 @@ func (vs *VersionSet) pickCompaction() *Compaction {
 }
 
 func (vs *VersionSet) PickLevelForMemTableOutput(smallest, largest []byte) int {
-
 	return vs.current.pickLevelForMemTableOutput(smallest, largest)
 }
 
@@ -299,7 +297,6 @@ func (v *Version) pickLevelForMemTableOutput(smallest, largest []byte) int {
 	defer v.vset.lock.RUnlock()
 	level := 0
 	if !v.overlapInLevel(0, smallest, largest) {
-
 		for ; level < kMaxMemCompactLevel; level++ {
 			if v.overlapInLevel(level+1, smallest, largest) {
 				break

@@ -3,16 +3,13 @@ package cache
 import "sync"
 
 type LRU struct {
-	sync.RWMutex
-	m map[string]*Node
-	//head     *Node
-	//tail     *Node
+	m        map[string]*Node
 	list     *List
 	capacity int
+	sync.RWMutex
 }
 
 func NewLRUReplacer(capacity int) Replacer {
-
 	return &LRU{
 		m:        make(map[string]*Node),
 		list:     newList(),
@@ -21,8 +18,8 @@ func NewLRUReplacer(capacity int) Replacer {
 }
 
 func (lru *LRU) Get(key string) interface{} {
-	//lru.RLock()
-	//defer lru.RUnlock()
+	// lru.RLock()
+	// defer lru.RUnlock()
 	if node, ok := lru.m[key]; ok {
 		lru.list.Remove(node)
 		lru.list.Put2Head(node)
@@ -32,8 +29,8 @@ func (lru *LRU) Get(key string) interface{} {
 }
 
 func (lru *LRU) Put(key string, value interface{}) {
-	//lru.Lock()
-	//defer lru.Unlock()
+	// lru.Lock()
+	// defer lru.Unlock()
 	if node, ok := lru.m[key]; ok {
 		lru.list.Remove(node)
 		node.value = value

@@ -1,10 +1,11 @@
 package version
 
 import (
-	"ckv/sstable"
-	"ckv/utils"
 	"os"
 	"path/filepath"
+
+	"ckv/sstable"
+	"ckv/utils"
 )
 
 const (
@@ -16,33 +17,32 @@ const (
 type Manifest struct {
 	opt    *utils.Options
 	f      *os.File
-	levels [][]*FileMetaData   // level -> table
-	tables map[uint64]struct{} // fid -> table
+	tables map[uint64]struct{}
+	levels [][]*FileMetaData
 }
 
 // FileMetaData sstable info
 type FileMetaData struct {
-	//refs int
-	allowedSeeks int // seeks allowed until compaction
+	largest      []byte
+	smallest     []byte
+	allowedSeeks int
 	number       uint64
 	id           uint64
-	fileSize     uint64 // file size in bytes
-	largest      []byte // largest key served by table
-	smallest     []byte // smallest key served by table
+	fileSize     uint64
 }
 
 type VFileMetaData struct {
+	largest  []byte
+	smallest []byte
 	sstId    uint64
-	fileSize uint64 // file size in bytes
+	fileSize uint64
 	level    int
-	largest  []byte // largest key served by table
-	smallest []byte // smallest key served by table
 }
 
 type VFileGroupMetaData struct {
-	sstId    uint64
-	fileSize uint64 // file size in bytes
 	vfids    []uint64
+	sstId    uint64
+	fileSize uint64
 }
 
 func (meta *FileMetaData) UpdateMeta(t *sstable.Table) {
@@ -55,7 +55,7 @@ func (meta *FileMetaData) UpdateMeta(t *sstable.Table) {
 func NewManifest(opt *utils.Options) (*Manifest, error) {
 	path := filepath.Join(opt.WorkDir, ManifestFilename)
 	m := &Manifest{opt: opt}
-	f, err := os.OpenFile(path, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
+	f, err := os.OpenFile(path, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0o666)
 	if err != nil {
 		return nil, err
 	}

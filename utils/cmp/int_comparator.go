@@ -2,8 +2,7 @@ package cmp
 
 import "bytes"
 
-type IntComparator struct {
-}
+type IntComparator struct{}
 
 func (cmp IntComparator) Compare(a, b []byte) int {
 	sa := calc(a)
@@ -16,7 +15,6 @@ func (cmp IntComparator) Compare(a, b []byte) int {
 	} else {
 		return 1
 	}
-	return 0
 }
 
 func calc(key []byte) int {

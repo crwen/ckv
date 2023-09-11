@@ -1,17 +1,18 @@
 package version
 
 import (
-	"ckv/file"
-	"ckv/sstable"
-	"ckv/utils"
-	"ckv/utils/convert"
-	"ckv/vlog"
 	"fmt"
 	"log"
 	"math/rand"
 	"os"
 	"path/filepath"
 	"time"
+
+	"ckv/file"
+	"ckv/sstable"
+	"ckv/utils"
+	"ckv/utils/convert"
+	"ckv/vlog"
 )
 
 func (vs *VersionSet) RunGC() {
@@ -28,7 +29,6 @@ func (vs *VersionSet) RunGC() {
 }
 
 func (vs *VersionSet) mergeVLog() {
-
 	vs.lock.Lock()
 	defer vs.lock.Unlock()
 
@@ -40,13 +40,7 @@ func (vs *VersionSet) mergeVLog() {
 	vs.info.PrintVLogGroup()
 	filter := func(files []uint64) []uint64 {
 		res := make([]uint64, 0)
-		for i := range files {
-			fid := files[i]
-			//if state, ok := vs.info.GetVTableState(fid); ok && state == NORMAL {
-			res = append(res, fid)
-			//vs.info.SetTableState(fid, GC)
-			//}
-		}
+		res = append(res, files...)
 		return res
 	}
 	if state, ok := vs.info.GetTableState(fid); ok && state == NORMAL {
@@ -77,7 +71,6 @@ func (vs *VersionSet) mergeVLog() {
 			go vs.mergeVLogs(fid, mergeFids)
 		}
 	}
-
 }
 
 // mergeVLogs merge vlogs that the ssTable refs
@@ -152,7 +145,7 @@ func (vs *VersionSet) mergeVLogs(sstFid uint64, fids []uint64) (*vlog.VLogFile, 
 	// write new meta
 	vs.addFileMeta(vs.pendingGC.level, t)
 
-	//vs.info.MergeVLogGroup(mergeFids, newFid)
+	// vs.info.MergeVLogGroup(mergeFids, newFid)
 	vs.info.AddNewVLogWithGroup(newFid)
 	vs.info.SetTableState(newFid, NORMAL)
 
